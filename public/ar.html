@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="uz">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>PINHAN BOX - WebAR</title>
+
+    <!-- A-Frame 1.4.2 - Most stable with MindAR -->
+    <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
+
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html,
+        body {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: #000;
+            position: fixed;
+            font-family: Arial, sans-serif;
+        }
+
+        #loading {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(to bottom, #111, #000);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 10000;
+            transition: opacity 0.5s;
+        }
+
+        .spinner {
+            width: 60px;
+            height: 60px;
+            border: 4px solid rgba(255, 215, 0, 0.2);
+            border-top: 4px solid #FFD700;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-bottom: 20px;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        h2 {
+            color: #FFD700;
+            font-size: 22px;
+            margin: 10px 0;
+        }
+
+        p {
+            color: #aaa;
+            font-size: 14px;
+        }
+
+        #btn-start {
+            margin-top: 20px;
+            padding: 14px 40px;
+            background: linear-gradient(135deg, #FFD700, #B8860B);
+            border: none;
+            border-radius: 50px;
+            color: #000;
+            font-weight: bold;
+            font-size: 16px;
+            cursor: pointer;
+            display: none;
+            box-shadow: 0 8px 20px rgba(212, 175, 55, 0.4);
+        }
+
+        #btn-start:active {
+            transform: scale(0.95);
+        }
+
+        #btn-record {
+            position: fixed;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 70px;
+            height: 70px;
+            background: rgba(255, 255, 255, 0.3);
+            backdrop-filter: blur(8px);
+            border: 4px solid #fff;
+            border-radius: 50%;
+            cursor: pointer;
+            display: none;
+            z-index: 999;
+        }
+
+        #btn-record::after {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 50px;
+            height: 50px;
+            background: #fff;
+            border-radius: 50%;
+        }
+
+        #btn-record.recording::after {
+            background: #ff4444;
+            border-radius: 8px;
+            width: 25px;
+            height: 25px;
+        }
+
+        #toast {
+            position: fixed;
+            bottom: 110px;
+            left: 50%;
+            transform: translateX(-50%);
+            padding: 10px 20px;
+            background: rgba(0, 0, 0, 0.8);
+            color: #fff;
+            border-radius: 30px;
+            font-size: 13px;
+            z-index: 1000;
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+
+        #vid {
+            display: none;
+        }
+
+        #ar-container {
+            width: 100%;
+            height: 100%;
+            position: absolute;
+            top: 0;
+            left: 0;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div id="loading">
+        <div class="spinner"></div>
+        <h2>PINHAN BOX</h2>
+        <p id="status">Yuklanmoqda...</p>
+        <button id="btn-start">Boshlash</button>
+    </div>
+
+    <button id="btn-record"></button>
+    <div id="toast">Saqlandi!</div>
+    <div id="ar-container"></div>
+
+    <script>
+        const uuid = new URLSearchParams(window.location.search).get('id');
+        const loading = document.getElementById('loading');
+        const status = document.getElementById('status');
+        const btnStart = document.getElementById('btn-start');
+        const btnRecord = document.getElementById('btn-record');
+        const toast = document.getElementById('toast');
+
+        let recorder, chunks = [], recording = false, recCanvas, recCtx;
+
+        if (!uuid) {
+            status.innerText = "Xatolik: ID topilmadi";
+            status.style.color = "#ff4444";
+        } else {
+            init();
+        }
+
+        async function init() {
+            try {
+                const res = await fetch(`/api/project/${uuid}`);
+                if (!res.ok) throw new Error("Server xatosi");
+
+                const data = await res.json();
+                if (data.error) throw new Error(data.error);
+
+                status.innerText = "Tayyor!";
+                btnStart.style.display = "block";
+                btnStart.onclick = () => {
+                    loading.style.opacity = "0";
+                    setTimeout(() => loading.style.display = "none", 500);
+                    startAR(data);
+                };
+            } catch (e) {
+                status.innerText = "Xatolik: " + e.message;
+                status.style.color = "#ff4444";
+            }
+        }
+
+        function showToast(msg) {
+            toast.innerText = msg;
+            toast.style.opacity = "1";
+            setTimeout(() => toast.style.opacity = "0", 2500);
+        }
+
+        function startAR(data) {
+            const container = document.getElementById('ar-container');
+            const mRatio = data.markerRatio || 1.0;
+            const vRatio = data.videoRatio || 1.0;
+            const pHeight = 1 / mRatio;
+
+            let repeat = "1 1", offset = "0 0";
+            if (vRatio > mRatio) {
+                const s = mRatio / vRatio;
+                repeat = `${s} 1`;
+                offset = `${(1 - s) / 2} 0`;
+            } else {
+                const s = vRatio / mRatio;
+                repeat = `1 ${s}`;
+                offset = `0 ${(1 - s) / 2}`;
+            }
+
+            container.innerHTML = `
+                <a-scene 
+                    mindar-image="imageTargetSrc: ${data.mind}; uiLoading: no; uiScanning: yes;" 
+                    renderer="colorManagement: true; preserveDrawingBuffer: true;"
+                    vr-mode-ui="enabled: false" 
+                    device-orientation-permission-ui="enabled: false">
+                    
+                    <a-assets>
+                        <video id="vid" src="${data.video}" preload="auto" loop crossorigin="anonymous" playsinline webkit-playsinline></video>
+                        <img id="logo" src="/watermark_logo.png">
+                    </a-assets>
+
+                    <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
+
+                    <a-entity mindar-image-target="targetIndex: 0">
+                        <a-plane 
+                            material="src: #vid; transparent: false; repeat: ${repeat}; offset: ${offset}" 
+                            position="0 0 0" 
+                            width="1" 
+                            height="${pHeight}">
+                        </a-plane>
+                    </a-entity>
+                </a-scene>
+            `;
+
+            btnRecord.style.display = "block";
+            recCanvas = document.createElement('canvas');
+            recCtx = recCanvas.getContext('2d');
+
+            setTimeout(() => {
+                const video = document.getElementById('vid');
+                const target = document.querySelector('[mindar-image-target]');
+                const arCanvas = document.querySelector('a-scene').canvas;
+                const camVideo = document.querySelector('video:not(#vid)');
+                const logo = document.getElementById('logo');
+
+                target.addEventListener('targetFound', () => video.play());
+                target.addEventListener('targetLost', () => video.pause());
+
+                function mergeFrames() {
+                    if (!recording) return;
+                    if (recCanvas.width !== arCanvas.width) {
+                        recCanvas.width = arCanvas.width;
+                        recCanvas.height = arCanvas.height;
+                    }
+                    if (camVideo) recCtx.drawImage(camVideo, 0, 0, recCanvas.width, recCanvas.height);
+                    recCtx.drawImage(arCanvas, 0, 0);
+                    if (logo && logo.complete) {
+                        const logoW = recCanvas.width * 0.35; // Larger: 35% of screen width
+                        const logoH = logoW * (logo.naturalHeight / logo.naturalWidth);
+                        const posX = (recCanvas.width - logoW) / 2; // Centered
+                        const posY = (recCanvas.height * 0.80) - (logoH / 2); // Lower: 80% down
+
+                        recCtx.globalAlpha = 0.9;
+                        recCtx.drawImage(logo, posX, posY, logoW, logoH);
+                        recCtx.globalAlpha = 1.0;
+                    }
+                    requestAnimationFrame(mergeFrames);
+                }
+
+                btnRecord.onclick = () => {
+                    if (recording) {
+                        recording = false;
+                        recorder.stop();
+                    } else {
+                        recording = true;
+                        requestAnimationFrame(mergeFrames);
+                        const stream = recCanvas.captureStream(30);
+                        recorder = new MediaRecorder(stream, { mimeType: 'video/webm;codecs=vp8' });
+                        chunks = [];
+                        recorder.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
+                        recorder.onstop = () => {
+                            const blob = new Blob(chunks, { type: 'video/webm' });
+                            const url = URL.createObjectURL(blob);
+                            const a = document.createElement('a');
+                            a.href = url;
+                            a.download = `sovga-${Date.now()}.webm`;
+                            a.click();
+                            btnRecord.classList.remove('recording');
+                            showToast("Video saqlandi!");
+                        };
+                        recorder.start();
+                        btnRecord.classList.add('recording');
+                    }
+                };
+            }, 2000);
+        }
+    </script>
+</body>
+
+</html>

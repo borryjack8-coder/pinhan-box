@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="uz">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>PINHAN BOX - AR Explorer</title>
+    <script src="https://unpkg.com/html5-qrcode"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #bb86fc;
+            --secondary: #03dac6;
+            --bg: #000000;
+            --text: #ffffff;
+        }
+
+        body,
+        html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: var(--bg);
+            font-family: 'Outfit', sans-serif;
+            color: var(--text);
+        }
+
+        #reader {
+            width: 100%;
+            height: 100%;
+            border: none !important;
+        }
+
+        #reader video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            align-items: center;
+            padding: 2rem 0;
+            box-sizing: border-box;
+            background: rgba(0, 0, 0, 0.2);
+            z-index: 10;
+        }
+
+        .header {
+            text-align: center;
+        }
+
+        .header h1 {
+            margin: 0;
+            font-size: 1.8rem;
+            letter-spacing: 2px;
+            background: linear-gradient(45deg, var(--primary), var(--secondary));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .scan-box {
+            width: 250px;
+            height: 250px;
+            border: 2px solid var(--primary);
+            border-radius: 20px;
+            position: relative;
+            box-shadow: 0 0 20px rgba(187, 134, 252, 0.5);
+        }
+
+        .scan-box::after {
+            content: "";
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 2px;
+            background: var(--secondary);
+            animation: scan 2s linear infinite;
+        }
+
+        @keyframes scan {
+            0% {
+                top: 0;
+            }
+
+            50% {
+                top: 100%;
+            }
+
+            100% {
+                top: 0;
+            }
+        }
+
+        .controls {
+            pointer-events: auto;
+            display: flex;
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+
+        .btn {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            padding: 0.8rem 1.5rem;
+            border-radius: 30px;
+            color: white;
+            font-size: 0.9rem;
+            cursor: pointer;
+            transition: 0.3s;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .btn:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        #manual-modal {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: var(--bg);
+            padding: 2rem;
+            border-radius: 20px;
+            border: 1px solid var(--primary);
+            z-index: 100;
+            width: 80%;
+            max-width: 400px;
+            display: none;
+        }
+
+        #manual-modal input {
+            width: 100%;
+            padding: 1rem;
+            background: #222;
+            border: 1px solid #444;
+            border-radius: 10px;
+            color: white;
+            margin-bottom: 1rem;
+            box-sizing: border-box;
+        }
+
+        .backdrop {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            z-index: 90;
+            display: none;
+        }
+
+        #status-msg {
+            position: absolute;
+            bottom: 6rem;
+            color: var(--secondary);
+            font-size: 0.9rem;
+            text-shadow: 0 0 5px black;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div id="reader"></div>
+
+    <div class="overlay">
+        <div class="header">
+            <h1>PINHAN BOX</h1>
+            <p>Skanerlash boshlandi...</p>
+        </div>
+
+        <div class="scan-box"></div>
+
+        <div id="status-msg">QR kodni ramka ichiga keltiring</div>
+
+        <div class="controls">
+            <button class="btn" onclick="showModal()">🆔 Ssilka kiritish</button>
+            <a href="/admin.html" class="btn" style="text-decoration: none;">⚙️ Admin</a>
+        </div>
+    </div>
+
+    <div class="backdrop" id="backdrop" onclick="hideModal()"></div>
+    <div id="manual-modal">
+        <h3>Loyiha ID yoki Ssilka</h3>
+        <input type="text" id="manual-id" placeholder="ID ni bu yerga kiriting...">
+        <button class="btn" style="width: 100%; justify-content: center; background: var(--primary);"
+            onclick="handleManual()">Ochish</button>
+    </div>
+
+    <script>
+        let html5QrCode;
+
+        function startScanner() {
+            html5QrCode = new Html5Qrcode("reader");
+            const config = { fps: 10, qrbox: { width: 250, height: 250 } };
+
+            html5QrCode.start(
+                { facingMode: "environment" },
+                config,
+                onScanSuccess
+            ).catch(err => {
+                document.getElementById('status-msg').innerText = "Kameraga ruxsat berilmagan!";
+                document.getElementById('status-msg').style.color = "red";
+            });
+        }
+
+        function onScanSuccess(decodedText) {
+            // Check if it's a URL with an ID or just a raw UUID
+            let uuid = "";
+            try {
+                const url = new URL(decodedText);
+                uuid = url.searchParams.get("id");
+            } catch (e) {
+                // If not URL, check if it looks like a UUID
+                if (decodedText.length > 20) uuid = decodedText;
+            }
+
+            if (uuid) {
+                html5QrCode.stop();
+                window.location.href = `/ar.html?id=${uuid}`;
+            }
+        }
+
+        function showModal() {
+            document.getElementById('backdrop').style.display = 'block';
+            document.getElementById('manual-modal').style.display = 'block';
+        }
+
+        function hideModal() {
+            document.getElementById('backdrop').style.display = 'none';
+            document.getElementById('manual-modal').style.display = 'none';
+        }
+
+        function handleManual() {
+            const input = document.getElementById('manual-id').value.trim();
+            let uuid = input;
+
+            try {
+                if (input.includes('?id=')) {
+                    uuid = input.split('id=')[1].split('&')[0];
+                }
+            } catch (e) { }
+
+            if (uuid) {
+                window.location.href = `/ar.html?id=${uuid}`;
+            } else {
+                alert("Noto'g'ri ID!");
+            }
+        }
+
+        // Start scanner on load
+        window.addEventListener('load', startScanner);
+    </script>
+</body>
+
+</html>

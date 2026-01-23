@@ -1,0 +1,755 @@
+<!DOCTYPE html>
+<html lang="uz">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PINHAN BOX - Admin Panel</title>
+    <!-- MindAR Image Compiler -->
+    <script type="module">
+        import { Compiler } from "https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image.prod.js";
+        window.MINDAR = { IMAGE: { Compiler } };
+        window.isMindARLoaded = true;
+    </script>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #FFD700;
+            --primary-dark: #B8860B;
+            --bg-dark: #0f0f0f;
+            --card-bg: #1a1a1a;
+            --text-main: #ffffff;
+            --text-dim: #aaaaaa;
+            --danger: #ff4444;
+            --success: #00c851;
+        }
+
+        * {
+            box-sizing: border-box;
+            font-family: 'Outfit', sans-serif;
+        }
+
+        body {
+            background: var(--bg-dark);
+            color: var(--text-main);
+            margin: 0;
+            padding: 0;
+            min-height: 100vh;
+        }
+
+        /* Login Screen */
+        #login-screen {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            width: 100%;
+        }
+
+        .login-card {
+            background: var(--card-bg);
+            padding: 40px;
+            border-radius: 20px;
+            width: 90%;
+            max-width: 400px;
+            text-align: center;
+            box-shadow: 0 15px 35px rgba(0, 0, 0, 0.5);
+            border: 1px solid rgba(255, 215, 0, 0.1);
+        }
+
+        .login-card h1 {
+            color: var(--primary);
+            margin-bottom: 30px;
+        }
+
+        .login-card input {
+            width: 100%;
+            padding: 15px;
+            border-radius: 10px;
+            border: 1px solid #333;
+            background: #111;
+            color: #fff;
+            margin-bottom: 20px;
+            font-size: 16px;
+        }
+
+        .btn-premium {
+            width: 100%;
+            padding: 15px;
+            border-radius: 10px;
+            border: none;
+            background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+            color: #000;
+            font-weight: 700;
+            cursor: pointer;
+            font-size: 16px;
+            transition: transform 0.2s;
+        }
+
+        .btn-premium:active {
+            transform: scale(0.98);
+        }
+
+        /* Main Dashboard */
+        #main-dashboard {
+            display: none;
+            padding: 40px 20px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 40px;
+        }
+
+        .header h1 {
+            color: var(--primary);
+            margin: 0;
+        }
+
+        .tab-buttons {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 30px;
+        }
+
+        .tab-btn {
+            background: #222;
+            border: none;
+            color: #fff;
+            padding: 12px 25px;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: 0.3s;
+        }
+
+        .tab-btn.active {
+            background: var(--primary);
+            color: #000;
+            font-weight: 600;
+        }
+
+        .card {
+            background: var(--card-bg);
+            padding: 30px;
+            border-radius: 20px;
+            border: 1px solid rgba(255, 215, 0, 0.05);
+        }
+
+        /* Form Section */
+        #form-section {
+            display: block;
+        }
+
+        .form-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+
+        @media (max-width: 768px) {
+            .form-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 10px;
+            color: var(--text-dim);
+        }
+
+        .form-group input {
+            width: 100%;
+            padding: 12px;
+            border-radius: 8px;
+            border: 1px solid #333;
+            background: #111;
+            color: #fff;
+        }
+
+        .preview-img {
+            max-width: 200px;
+            display: none;
+            margin-top: 10px;
+            border-radius: 8px;
+        }
+
+        /* List Section */
+        #list-tab {
+            display: none;
+        }
+
+        .project-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+
+        .project-table th {
+            text-align: left;
+            padding: 15px;
+            color: var(--text-dim);
+            border-bottom: 1px solid #333;
+        }
+
+        .project-table td {
+            padding: 15px;
+            border-bottom: 1px solid #222;
+        }
+
+        .action-btn {
+            padding: 8px 12px;
+            border-radius: 6px;
+            border: none;
+            cursor: pointer;
+            font-size: 13px;
+            margin-right: 5px;
+        }
+
+        .btn-copy {
+            background: var(--primary);
+            color: #000;
+        }
+
+        .btn-del {
+            background: var(--danger);
+            color: #fff;
+        }
+
+        .stat-badge {
+            background: #333;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+        }
+
+        .thumbnail {
+            width: 60px;
+            height: 60px;
+            border-radius: 8px;
+            object-fit: cover;
+            border: 1px solid #333;
+        }
+
+        /* Loader Overlay */
+        #loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            display: none;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+
+        .spinner {
+            width: 50px;
+            height: 50px;
+            border: 4px solid #333;
+            border-top: 4px solid var(--primary);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        .progress-container {
+            width: 80%;
+            height: 10px;
+            background: #222;
+            border-radius: 5px;
+            margin-top: 20px;
+            overflow: hidden;
+            display: none;
+        }
+
+        .progress-bar {
+            width: 0%;
+            height: 100%;
+            background: var(--primary);
+            transition: width 0.3s;
+        }
+
+        /* Result Overlay after creation */
+        #result-card {
+            display: none;
+            text-align: center;
+        }
+
+        #qr-image {
+            width: 180px;
+            height: 180px;
+            margin: 20px auto;
+            background: #fff;
+            padding: 10px;
+            border-radius: 10px;
+        }
+
+        /* Edit Modal */
+        #edit-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 1100;
+        }
+
+        .edit-card {
+            background: var(--card-bg);
+            padding: 30px;
+            border-radius: 20px;
+            width: 90%;
+            max-width: 500px;
+            border: 1px solid var(--primary);
+        }
+    </style>
+</head>
+
+<body>
+
+    <!-- Login -->
+    <div id="login-screen">
+        <div class="login-card">
+            <div
+                style="background: #6f42c1; color: white; padding: 10px; border-radius: 10px; font-weight: bold; margin-bottom: 20px;">
+                V 3.1.2 - STABILITY UPDATE 💎</div>
+            <h1>PINHAN BOX</h1>
+            <p style="color: #FFD700; margin-bottom: 20px; font-weight: 600;">System Version: 3.1.2 (Bug Fixes)</p>
+            <input type="text" id="login-user" placeholder="Login...">
+            <input type="password" id="login-pass" placeholder="Parol...">
+            <button class="btn-premium" id="loginBtn" onclick="login()">Kirish</button>
+            <p style="color: #444; font-size: 10px; margin-top: 15px;">Cache-Control: disabled</p>
+        </div>
+    </div>
+
+    <!-- Dashboard -->
+    <div id="main-dashboard">
+        <div class="header">
+            <h1>PINHAN BOX Dashboard</h1>
+            <button class="tab-btn" style="background: var(--danger); color: #fff;" onclick="logout()">Chiqish</button>
+        </div>
+
+        <div class="tab-buttons">
+            <button id="btn-tab-create" class="tab-btn active" onclick="showTab('create')">Yangi Sovg'a</button>
+            <button id="btn-tab-list" class="tab-btn" onclick="showTab('list')">Sovg'alar Ro'yxati</button>
+        </div>
+
+        <!-- Create Tab -->
+        <div id="create-tab" class="card">
+            <div id="form-content">
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label>Loyiha nomi (Masalan: Ali va Vali)</label>
+                        <input type="text" id="projectName" placeholder="Nomi...">
+                    </div>
+                    <div class="form-group">
+                        <label>Mijoz haqida (Telegram/Tel...)</label>
+                        <input type="text" id="clientInfo" placeholder="@nick yoki +998...">
+                    </div>
+                    <div class="form-group">
+                        <label>1. Rasmni yuklang (Marker)</label>
+                        <input type="file" id="imageInput" accept="image/*">
+                        <p id="marker-info" style="font-size: 13px; margin-top: 5px; color: var(--success);"></p>
+                        <img id="image-preview" class="preview-img">
+                    </div>
+                    <div class="form-group">
+                        <label>2. Videoni yuklang (Overlay)</label>
+                        <input type="file" id="videoInput" accept="video/mp4,video/webm">
+                        <p id="video-info" style="font-size: 13px; margin-top: 5px; color: var(--success);"></p>
+                    </div>
+                </div>
+                <button class="btn-premium" id="startBtn" onclick="processAndUpload()">Loyiha yaratish</button>
+            </div>
+
+            <!-- Result Overlay after creation -->
+            <div id="result-card">
+                <h2 style="color: var(--success);">Muvaffaqiyatli!</h2>
+                <div id="qr-container">
+                    <img id="qr-image" src="" alt="QR">
+                </div>
+                <div style="display: flex; gap: 10px; justify-content: center; margin-bottom: 20px;">
+                    <button class="btn-premium" style="width: auto; padding: 12px 20px;" onclick="downloadResultQR()">QR
+                        Yuklab olish</button>
+                    <button class="tab-btn" id="copy-link-btn">Link nusxalash</button>
+                </div>
+                <button class="tab-btn" onclick="location.reload()">Yana yaratish</button>
+            </div>
+        </div>
+
+        <!-- List Tab -->
+        <div id="list-tab" class="card" style="display: none;">
+            <div style="overflow-x: auto;">
+                <table class="project-table">
+                    <thead>
+                        <tr>
+                            <th>Rasm</th>
+                            <th>Loyiha nomi</th>
+                            <th>Mijoz</th>
+                            <th>Sana</th>
+                            <th>Ko'rishlar</th>
+                            <th>Amallar</th>
+                        </tr>
+                    </thead>
+                    <tbody id="project-list-body">
+                        <!-- Projects load here -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Edit Modal -->
+    <div id="edit-modal">
+        <div class="edit-card">
+            <h2 style="color: var(--primary); margin-top: 0;">Loyihani tahrirlash</h2>
+            <input type="hidden" id="edit-uuid">
+            <div class="form-group">
+                <label>Loyiha nomi</label>
+                <input type="text" id="edit-name">
+            </div>
+            <div class="form-group">
+                <label>Mijoz haqida</label>
+                <input type="text" id="edit-client">
+            </div>
+            <div style="display: flex; gap: 10px; margin-top: 20px;">
+                <button class="btn-premium" onclick="saveEdit()">Saqlash</button>
+                <button class="tab-btn" onclick="closeEditModal()">Bekor qilish</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Loading Overlay -->
+    <div id="loading-overlay">
+        <div class="spinner"></div>
+        <h3 id="loading-text" style="margin-top: 20px;">Ishlamoqda...</h3>
+        <div id="prog-container" class="progress-container">
+            <div id="prog-bar" class="progress-bar"></div>
+        </div>
+        <p id="prog-stats" style="font-size: 13px; color: var(--text-dim); margin-top: 10px;"></p>
+    </div>
+
+    <script type="module">
+        import { upload } from 'https://esm.sh/@vercel/blob/client';
+        window.vercelBlob = { upload };
+    </script>
+
+    <script>
+        let markerRatio = 1.0;
+        let videoRatio = 1.0;
+        let markerHash = "";
+        let lastCreatedLink = "";
+        let lastCreatedName = "";
+
+        // Auth Check
+        async function checkAuth() {
+            const res = await fetch('/api/check-auth');
+            const data = await res.json();
+            if (data.authenticated) {
+                document.getElementById('login-screen').style.display = 'none';
+                document.getElementById('main-dashboard').style.display = 'block';
+                loadProjects();
+            }
+        }
+        checkAuth();
+
+        // Auto-focus login
+        window.onload = () => document.getElementById('login-user').focus();
+        async function calculateHash(file) {
+            const arrayBuffer = await file.arrayBuffer();
+            const hashBuffer = await crypto.subtle.digest('SHA-256', arrayBuffer);
+            const hashArray = Array.from(new Uint8Array(hashBuffer));
+            return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+        }
+
+        async function login() {
+            const username = document.getElementById('login-user').value;
+            const password = document.getElementById('login-pass').value;
+            const res = await fetch('/api/v1/login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username, password })
+            });
+            const data = await res.json();
+            if (res.ok) {
+                location.reload();
+            } else {
+                alert(data.error || "Login yoki parol noto'g'ri (V3 error)");
+            }
+        }
+
+        async function logout() {
+            await fetch('/api/logout', { method: 'POST' });
+            location.reload();
+        }
+
+        function showTab(tab) {
+            document.getElementById('create-tab').style.display = tab === 'create' ? 'block' : 'none';
+            document.getElementById('list-tab').style.display = tab === 'list' ? 'block' : 'none';
+            document.getElementById('btn-tab-create').classList.toggle('active', tab === 'create');
+            document.getElementById('btn-tab-list').classList.toggle('active', tab === 'list');
+            if (tab === 'list') loadProjects();
+        }
+
+        // File Analysis
+        document.getElementById('imageInput').addEventListener('change', async (e) => {
+            if (e.target.files[0]) {
+                const file = e.target.files[0];
+                markerHash = await calculateHash(file);
+
+                const reader = new FileReader();
+                reader.onload = (ev) => {
+                    const img = new Image();
+                    img.src = ev.target.result;
+                    img.onload = () => {
+                        markerRatio = img.width / img.height;
+                        const preview = document.getElementById('image-preview');
+                        preview.src = img.src;
+                        preview.style.display = 'block';
+                        document.getElementById('marker-info').innerText = `Rasm: ${img.width}x${img.height} (Nisbat: ${markerRatio.toFixed(2)})`;
+                    };
+                };
+                reader.readAsDataURL(file);
+            }
+        });
+
+        document.getElementById('videoInput').addEventListener('change', (e) => {
+            if (e.target.files[0]) {
+                const video = document.createElement('video');
+                video.preload = 'metadata';
+                video.onloadedmetadata = () => {
+                    videoRatio = video.videoWidth / video.videoHeight;
+                    const sizeMb = (e.target.files[0].size / (1024 * 1024)).toFixed(1);
+                    document.getElementById('video-info').innerHTML = `Video: ${video.videoWidth}x${video.videoHeight} (Nisbat: ${videoRatio.toFixed(2)}, Hajm: ${sizeMb}MB)`;
+                };
+                video.src = URL.createObjectURL(e.target.files[0]);
+            }
+        });
+
+        async function processAndUpload() {
+            const name = document.getElementById('projectName').value;
+            const client = document.getElementById('clientInfo').value;
+            const imgFile = document.getElementById('imageInput').files[0];
+            const vidFile = document.getElementById('videoInput').files[0];
+
+            if (!name) return alert("Loyiha nomini kiriting!");
+            if (!vidFile || !imgFile) return alert("Video va Rasm tanlang!");
+
+            const overlay = document.getElementById('loading-overlay');
+            const loadText = document.getElementById('loading-text');
+            overlay.style.display = 'flex';
+            loadText.innerText = "Rasm optimizatsiya qilinmoqda...";
+
+            async function localUpload(file, label) {
+                const formData = new FormData();
+                formData.append('file', file);
+
+                const response = await fetch('/api/v1/blob/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(`${label} yuklashda xatolik: ${errorData.error || response.statusText}`);
+                }
+
+                return await response.json();
+            }
+
+            try {
+                // Compile
+                const compiler = new MINDAR.IMAGE.Compiler();
+                const img = new Image();
+                img.src = URL.createObjectURL(imgFile);
+                await new Promise(r => img.onload = r);
+
+                await compiler.compileImageTargets([img], (p) => {
+                    loadText.innerText = `Tayyorlanmoqda: ${p.toFixed(0)}%`;
+                });
+
+                const exportedBuffer = await compiler.exportData();
+                const mindFile = new File([new Blob([exportedBuffer])], "targets.mind");
+
+                loadText.innerText = "Fayllar yuklanmoqda...";
+
+                // 1. Upload Video
+                loadText.innerText = "Video yuklanmoqda...";
+                const videoBlob = await localUpload(vidFile, "Video");
+
+                // 2. Upload Mind File
+                loadText.innerText = "Mind fayl yuklanmoqda...";
+                const mindBlob = await localUpload(mindFile, "Mind");
+
+                // 3. Upload Original Image
+                loadText.innerText = "Rasm yuklanmoqda...";
+                const imageBlob = await localUpload(imgFile, "Rasm");
+
+                // 4. Save Metadata to DB
+                loadText.innerText = "Ma'lumotlar saqlanmoqda...";
+                const res = await fetch('/api/v1/projects/create', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        projectName: name,
+                        clientInfo: client,
+                        videoPath: videoBlob.url,
+                        mindPath: mindBlob.url,
+                        imagePath: imageBlob.url,
+                        markerRatio: markerRatio,
+                        videoRatio: videoRatio,
+                        markerHash: markerHash
+                    })
+                });
+
+                const data = await res.json();
+                overlay.style.display = 'none';
+
+                if (res.ok && data.success) {
+                    document.getElementById('form-content').style.display = 'none';
+                    document.getElementById('result-card').style.display = 'block';
+                    lastCreatedLink = data.link;
+                    lastCreatedName = name || 'PINHANBOX';
+                    document.getElementById('qr-image').src = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(data.link)}`;
+                    document.getElementById('copy-link-btn').onclick = () => copyLink(data.link);
+                } else {
+                    alert("Xato: " + (data.error || "Saqlashda muammo bo'ldi"));
+                }
+            } catch (err) {
+                console.error(err);
+                alert("Xato (Local Upload): " + err.message);
+                overlay.style.display = 'none';
+            }
+        }
+
+        async function loadProjects() {
+            const res = await fetch('/api/admin/projects');
+            const projects = await res.json();
+            const body = document.getElementById('project-list-body');
+            body.innerHTML = '';
+            projects.forEach(p => {
+                const date = new Date(p.created_at).toLocaleDateString();
+                const link = `${window.location.protocol}//${window.location.host}/ar.html?id=${p.uuid}`;
+                const thumbUrl = p.image_path || 'https://via.placeholder.com/60';
+                body.innerHTML += `
+                    <tr>
+                        <td><img src="${thumbUrl}" class="thumbnail"></td>
+                        <td><strong>${p.name}</strong></td>
+                        <td>${p.client_info || '-'}</td>
+                        <td>${date}</td>
+                        <td><span class="stat-badge">${p.views} marta</span></td>
+                        <td>
+                            <button class="action-btn btn-copy" onclick="downloadQR('${link}', '${p.name}')">QR</button>
+                            <button class="action-btn" style="background: #2196F3; color: #fff;" onclick="downloadMarker('${p.image_path}', '${p.name}')">Rasm</button>
+                            <button class="action-btn" style="background: #673AB7; color: #fff;" onclick="openEditModal('${p.uuid}', '${p.name}', '${p.client_info}')">Söz</button>
+                            <button class="action-btn" style="background: #444; color: #fff;" onclick="copyLink('${link}')">Link</button>
+                            <button class="action-btn btn-del" onclick="deleteProject('${p.uuid}')">O'chir</button>
+                        </td>
+                    </tr>
+                `;
+            });
+        }
+
+        async function downloadQR(link, name) {
+            const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=500x500&data=${encodeURIComponent(link)}`;
+            try {
+                const res = await fetch(qrUrl);
+                const blob = await res.blob();
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `QR-${name.replace(/\s+/g, '-')}.png`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+            } catch (err) {
+                alert("QR yuklashda xatolik!");
+            }
+        }
+
+        function downloadMarker(url, name) {
+            if (!url) return alert("Rasm topilmadi!");
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `Rasm-${name.replace(/\s+/g, '-')}.png`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+        }
+
+        // Edit Logic
+        function openEditModal(uuid, name, client) {
+            document.getElementById('edit-uuid').value = uuid;
+            document.getElementById('edit-name').value = name;
+            document.getElementById('edit-client').value = client;
+            document.getElementById('edit-modal').style.display = 'flex';
+        }
+
+        function closeEditModal() {
+            document.getElementById('edit-modal').style.display = 'none';
+        }
+
+        async function saveEdit() {
+            const uuid = document.getElementById('edit-uuid').value;
+            const name = document.getElementById('edit-name').value;
+            const client_info = document.getElementById('edit-client').value;
+
+            const res = await fetch('/api/admin/edit', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ uuid, name, client_info })
+            });
+
+            if (res.ok) {
+                closeEditModal();
+                loadProjects();
+            } else {
+                alert("Saqlashda xatolik!");
+            }
+        }
+
+        function downloadResultQR() {
+            if (lastCreatedLink) downloadQR(lastCreatedLink, lastCreatedName);
+        }
+
+        function copyLink(link) {
+            navigator.clipboard.writeText(link);
+            alert("Havola nusxalandi!");
+        }
+
+        async function deleteProject(uuid) {
+            if (!confirm("Rostdan ham o'chirmoqchimisiz?")) return;
+            const res = await fetch('/api/admin/delete', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ uuid })
+            });
+            if (res.ok) loadProjects();
+        }
+    </script>
+</body>
+
+</html>
