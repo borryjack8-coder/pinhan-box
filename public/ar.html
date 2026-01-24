@@ -3,16 +3,14 @@
 
 <head>
     <meta charset="UTF-8">
-    <!-- 1. Responsive Fix: Strict viewport -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>PINHAN BOX - WebAR</title>
 
-    <!-- A-Frame 1.4.2 & MindAR 1.2.5 -->
+    <!-- A-Frame & MindAR -->
     <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
 
     <style>
-        /* Base Reset */
         * {
             margin: 0;
             padding: 0;
@@ -25,14 +23,10 @@
             height: 100%;
             overflow: hidden;
             background-color: #000;
-            font-family: 'Outfit', sans-serif;
-            /* Maintaining font consistency */
+            font-family: sans-serif;
         }
 
-        /* 
-           2. Overlay Logic & 4. CSS Cleanup 
-           Scan Overlay - Covers everything initially 
-        */
+        /* OVERLAY */
         #scan-overlay {
             position: fixed;
             top: 0;
@@ -45,7 +39,6 @@
             justify-content: center;
             align-items: center;
             z-index: 9999;
-            /* Topmost layer */
             transition: opacity 0.5s ease-out;
         }
 
@@ -53,8 +46,7 @@
             width: 150px;
             height: 150px;
             margin-bottom: 40px;
-            /* 4. CSS Cleanup: Responsive container */
-            max-width: 80%;
+            max-width: 50%;
         }
 
         .logo-container img {
@@ -65,21 +57,13 @@
 
         .btn-start {
             padding: 16px 40px;
-            background: linear-gradient(135deg, #FFD700 0%, #B8860B 100%);
+            background: #FFD700;
             border: none;
             border-radius: 50px;
-            color: #000;
             font-weight: 800;
             font-size: 18px;
             cursor: pointer;
             box-shadow: 0 10px 25px rgba(255, 215, 0, 0.3);
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            transition: transform 0.2s;
-        }
-
-        .btn-start:active {
-            transform: scale(0.95);
         }
 
         #error-msg {
@@ -87,35 +71,41 @@
             margin-top: 20px;
             font-size: 14px;
             display: none;
-            text-align: center;
-            padding: 0 20px;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 10px;
+            border-radius: 8px;
+            max-width: 90%;
         }
 
         /* 
-           3. Z-Index Correction 
-           Ensure video (camera feed) is background 
+           FORCE VIDEO VISIBILITY 
+           MindAR creates a <video> element. We must ensure it's visible.
         */
-        /* MindAR injects a video element. We target it globally carefully */
         video {
-            /* This targets the camera feed primarily */
             position: absolute;
             top: 0;
             left: 0;
-            z-index: -2 !important;
             width: 100%;
             height: 100%;
             object-fit: cover;
+            z-index: -100 !important;
+            /* Send way back */
+            opacity: 1 !important;
+            /* Force visible */
+            display: block !important;
         }
 
-        /* The Canvas where A-Frame renders 3D */
+        /* Canvas (AR overlay) must be transparent and on top */
         .a-canvas {
-            z-index: 1 !important;
             position: absolute;
             top: 0;
             left: 0;
+            width: 100% !important;
+            height: 100% !important;
+            z-index: 1 !important;
+            background: transparent !important;
         }
 
-        /* Custom UI on top of AR */
         #ui-layer {
             position: absolute;
             top: 0;
@@ -124,83 +114,42 @@
             height: 100%;
             z-index: 100;
             pointer-events: none;
-            /* Let clicks pass through to AR */
         }
 
-        /* Recording Button */
-        #btn-record {
+        /* Debug Console on Screen */
+        #debug-console {
             position: absolute;
-            bottom: 40px;
-            left: 50%;
-            transform: translateX(-50%);
-            width: 72px;
-            height: 72px;
-            background: rgba(255, 255, 255, 0.2);
-            backdrop-filter: blur(10px);
-            border: 4px solid #fff;
-            border-radius: 50%;
-            cursor: pointer;
-            pointer-events: auto;
+            top: 10px;
+            left: 10px;
+            background: rgba(0, 0, 0, 0.5);
+            color: lime;
+            font-size: 10px;
+            z-index: 10000;
+            padding: 5px;
             display: none;
-            /* Hidden until started */
-        }
-
-        #btn-record::after {
-            content: '';
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            width: 54px;
-            height: 54px;
-            background: #fff;
-            border-radius: 50%;
-            transition: all 0.3s;
-        }
-
-        #btn-record.recording::after {
-            width: 28px;
-            height: 28px;
-            border-radius: 6px;
-            /* Square stop icon */
-            background: #ff4444;
-        }
-
-        #toast {
-            position: absolute;
-            top: 10%;
-            left: 50%;
-            transform: translateX(-50%);
-            background: rgba(0, 0, 0, 0.7);
-            color: #fff;
-            padding: 10px 20px;
-            border-radius: 20px;
-            font-size: 14px;
-            opacity: 0;
-            transition: opacity 0.3s;
+            /* Set to block if needed */
+            max-height: 200px;
+            overflow: auto;
+            pointer-events: none;
         }
     </style>
 </head>
 
 <body>
 
-    <!-- 2. SCAN OVERLAY -->
+    <div id="debug-console"></div>
+
+    <!-- SCAN OVERLAY -->
     <div id="scan-overlay">
         <div class="logo-container">
             <img src="/watermark_logo.png" alt="Logo">
         </div>
-        <button class="btn-start" id="btn-init">CAMERA</button>
+        <button class="btn-start" id="btn-init">BOSHLASH</button>
         <p id="error-msg"></p>
-        <p style="color: #666; font-size: 12px; margin-top: 15px;">v4.0 Mobile Optimized</p>
+        <p style="color: #666; font-size: 12px; margin-top: 15px;">v4.1 Check</p>
     </div>
 
-    <!-- UI Layer for controls -->
-    <div id="ui-layer">
-        <div id="toast">Video saqlandi!</div>
-        <div id="btn-record"></div>
-    </div>
-
-    <!-- AR Scene Container -->
+    <div id="ui-layer"></div>
     <div id="ar-scene-container"></div>
 
     <script>
@@ -209,87 +158,74 @@
         const btnInit = document.getElementById('btn-init');
         const errorMsg = document.getElementById('error-msg');
         const arContainer = document.getElementById('ar-scene-container');
-        const btnRecord = document.getElementById('btn-record');
-        const toast = document.getElementById('toast');
+        const debugConsole = document.getElementById('debug-console');
 
-        // State
-        let projectData = null;
-        let recorder = null;
-        let chunks = [];
-        let isRecording = false;
+        // Debug Logger
+        function log(msg) {
+            console.log(msg);
+            debugConsole.innerHTML += `> ${msg}<br>`;
+        }
 
-        // 1. Fetch Data immediately
+        function triggerError(msg) {
+            log("ERROR: " + msg);
+            errorMsg.innerText = msg;
+            errorMsg.style.display = 'block';
+            btnInit.style.display = 'block'; // Show button again to retry?
+            alert("Xatolik: " + msg); // Alert for mobile user
+        }
+
+        // 1. Fetch
         async function fetchProject() {
-            if (!uuid) return showError("ID topilmadi. QR kodni qayta tekshiring.");
-
+            if (!uuid) return triggerError("ID topilmadi.");
             try {
                 const res = await fetch(`/api/project/${uuid}`);
                 if (!res.ok) throw new Error("Loyiha topilmadi");
-                projectData = await res.json();
+                const data = await res.json();
 
-                // Enable button once data is ready
-                btnInit.innerText = "START CAMERA";
-                btnInit.disabled = false;
+                btnInit.onclick = () => startExperience(data);
+                log("Data loaded. Ready to start.");
             } catch (err) {
-                showError("Xatolik: " + err.message);
+                triggerError(err.message);
             }
         }
 
-        function showError(msg) {
-            errorMsg.innerText = msg;
-            errorMsg.style.display = 'block';
-            btnInit.style.display = 'none';
-        }
+        // 2. Start
+        function startExperience(data) {
+            log("Starting Experience...");
 
-        function showToast(msg) {
-            toast.innerText = msg;
-            toast.style.opacity = '1';
-            setTimeout(() => toast.style.opacity = '0', 2500);
-        }
-
-        // 2. Start Button Logic
-        btnInit.onclick = () => {
-            if (!projectData) return;
-
-            // Hide Overlay
+            // Hide overlay first? Or keep until camera ready?
+            // Let's hide overlay now but keep error msg area available
             overlay.style.opacity = '0';
             setTimeout(() => overlay.style.display = 'none', 500);
 
-            // Init AR
-            initAR(projectData);
-        };
-
-        function initAR(data) {
-            // Calculate ratios
+            // Init AR logic
             const mRatio = data.markerRatio || 1.0;
             const vRatio = data.videoRatio || 1.0;
-            const pHeight = 1 / mRatio; // Plane height relative to width 1
+            const pHeight = 1 / mRatio;
 
-            // Object-fit logic for the video on the marker
+            // Calculate fit
             let repeat = "1 1", offset = "0 0";
-            if (vRatio > mRatio) { // Video is wider than marker
+            if (vRatio > mRatio) {
                 const s = mRatio / vRatio;
                 repeat = `${s} 1`;
                 offset = `${(1 - s) / 2} 0`;
-            } else { // Video is taller/thinner
+            } else {
                 const s = vRatio / mRatio;
                 repeat = `1 ${s}`;
                 offset = `0 ${(1 - s) / 2}`;
             }
 
-            // 5. Autoplay Fix: Preload video
-            // We construct the HTML string for valid A-Frame scene
-            const sceneHTML = `
+            // Inject Scene
+            // NOTE: MindAR doesn't use 'arjs' attribute. It uses 'mindar-image'.
+            // forcing uiScanning: no to prevent default MindAR UI overlay conflict
+            arContainer.innerHTML = `
                 <a-scene 
-                    mindar-image="imageTargetSrc: ${data.mind}; uiLoading: no; uiScanning: yes; filterMinCF:0.0001; filterBeta: 0.001;" 
-                    color-space="sRGB" 
-                    renderer="colorManagement: true, physicallyCorrectLights: true, preserveDrawingBuffer: true" 
-                    vr-mode-ui="enabled: false" 
+                    mindar-image="imageTargetSrc: ${data.mind}; uiLoading: no; uiScanning: no; uiError: no;" 
+                    renderer="colorManagement: true, preserveDrawingBuffer: true"
+                    vr-mode-ui="enabled: false"
                     device-orientation-permission-ui="enabled: false">
                     
                     <a-assets>
-                        <!-- muted removed to allow sound, but handled via click -->
-                        <!-- 5. Autoplay Fix: playsinline is critical for iOS -->
                         <video id="ar-video" src="${data.video}" preload="auto" loop crossorigin="anonymous" playsinline webkit-playsinline></video>
                     </a-assets>
 
@@ -306,116 +242,50 @@
                 </a-scene>
             `;
 
-            arContainer.innerHTML = sceneHTML;
-            btnRecord.style.display = 'block';
-
-            // Post-Injection Logic
+            // 3. Handle Events & Errors
             const scene = arContainer.querySelector('a-scene');
             const video = document.getElementById('ar-video');
 
-            // 5. Autoplay: Unlock Audio on "Start" (User Gesture already happened)
-            // We play and pause immediately to prime the video element
+            // Prime video on user touch (critical for iOS)
+            // Even though we just clicked, we do it again here explicitly
             video.play().then(() => {
                 video.pause();
-            }).catch(e => console.log("Autoplay prime failed:", e));
+                log("Video primed.");
+            }).catch(e => log("Video prime warning: " + e.message));
 
-            scene.addEventListener('loaded', () => {
-                const target = document.querySelector('[mindar-image-target]');
-
-                target.addEventListener('targetFound', () => {
-                    console.log("Target Found");
-                    video.play();
-                });
-
-                target.addEventListener('targetLost', () => {
-                    console.log("Target Lost");
-                    video.pause();
-                    video.currentTime = 0; // Optional: Reset
-                });
+            // MindAR Events for Camera
+            scene.addEventListener('arReady', () => {
+                log("AR Ready. Camera should be visible.");
             });
 
-            setupRecording(scene);
+            scene.addEventListener('arError', (event) => {
+                triggerError("Kamera xatosi (AR Error): " + (event.detail.error || "Unknown"));
+            });
+
+            // Target events
+            const target = document.querySelector('[mindar-image-target]');
+            target.addEventListener('targetFound', () => {
+                log("Target Found!");
+                video.play();
+            });
+            target.addEventListener('targetLost', () => {
+                log("Target Lost.");
+                video.pause();
+            });
         }
 
-        // Recording Functionality (Preserved & Optimized)
-        function setupRecording(scene) {
-            const recCanvas = document.createElement('canvas');
-            const recCtx = recCanvas.getContext('2d');
-            const logo = new Image();
-            logo.src = "/watermark_logo.png"; // Backend uses this path
-
-            function mergeFrames() {
-                if (!isRecording) return;
-
-                const arCanvas = scene.components.screenshot.getCanvas('perspective');
-                const videoFeed = document.querySelector('video:not(#ar-video)'); // The camera feed
-
-                if (arCanvas) {
-                    if (recCanvas.width !== arCanvas.width) {
-                        recCanvas.width = arCanvas.width;
-                        recCanvas.height = arCanvas.height;
-                    }
-
-                    // Draw Camera
-                    if (videoFeed && videoFeed.readyState >= 2) {
-                        // Aspect Ratio Crop logic could be complex, simple draw for now
-                        // MindAR video is covered by strict CSS, so straightforward draw usually works
-                        recCtx.drawImage(videoFeed, 0, 0, recCanvas.width, recCanvas.height);
-                    } else {
-                        recCtx.fillStyle = 'black';
-                        recCtx.fillRect(0, 0, recCanvas.width, recCanvas.height);
-                    }
-
-                    // Draw AR
-                    recCtx.drawImage(arCanvas, 0, 0);
-
-                    // Draw Watermark
-                    if (logo.complete) {
-                        const logoW = recCanvas.width * 0.3; // 30% width
-                        const logoH = logoW * (logo.naturalHeight / logo.naturalWidth);
-                        const x = (recCanvas.width - logoW) / 2;
-                        const y = recCanvas.height - logoH - 50;
-                        recCtx.drawImage(logo, x, y, logoW, logoH);
-                    }
+        // Global Error Handler for Camera Constraints
+        window.addEventListener('unhandledrejection', function (event) {
+            if (event.reason && event.reason.name) {
+                if (event.reason.name === 'NotAllowedError') {
+                    triggerError("Kameraga ruxsat berilmadi!");
+                } else if (event.reason.name === 'NotFoundError') {
+                    triggerError("Kamera topilmadi!");
                 }
-
-                requestAnimationFrame(mergeFrames);
             }
+            log("Unhandled: " + event.reason);
+        });
 
-            btnRecord.onclick = () => {
-                if (isRecording) {
-                    // Stop
-                    isRecording = false;
-                    recorder.stop();
-                    btnRecord.classList.remove('recording');
-                } else {
-                    // Start
-                    isRecording = true;
-                    btnRecord.classList.add('recording');
-                    requestAnimationFrame(mergeFrames);
-
-                    const stream = recCanvas.captureStream(30);
-                    recorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
-                    chunks = [];
-
-                    recorder.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
-                    recorder.onstop = () => {
-                        const blob = new Blob(chunks, { type: 'video/webm' });
-                        const url = URL.createObjectURL(blob);
-                        const a = document.createElement('a');
-                        a.href = url;
-                        a.download = `Memories-${Date.now()}.webm`;
-                        document.body.appendChild(a);
-                        a.click();
-                        document.body.removeChild(a);
-                        showToast("Video saqlandi!");
-                    };
-                    recorder.start();
-                }
-            };
-        }
-
-        // Init
         fetchProject();
 
     </script>
