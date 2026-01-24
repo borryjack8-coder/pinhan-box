@@ -4,27 +4,39 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>PINHAN BOX - WebAR Debug</title>
+    <title>PINHAN BOX</title>
 
-    <!-- MindAR & A-Frame -->
+    <!-- A-Frame & MindAR -->
     <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600&display=swap" rel="stylesheet">
 
     <style>
-        /* 1. CSS "X-Ray" Fix & Transparency */
-        html,
-        body {
+        /* 
+           CORE RESETS 
+           ensure no scrolling, full screen, transparent backgrounds 
+        */
+        * {
             margin: 0;
             padding: 0;
-            width: 100%;
-            height: 100%;
-            background: transparent !important;
-            /* Critical for camera see-through */
-            overflow: hidden;
-            font-family: monospace;
+            box-sizing: border-box;
         }
 
-        /* 2. Target MindAR's video element specifically */
+        html,
+        body {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background: transparent !important;
+            font-family: 'Outfit', sans-serif;
+        }
+
+        /* 
+           CAMERA FEED LENS (The "Reality")
+           MindAR injects a video tag. We force it to be the background.
+           z-index: -2
+        */
         video {
             position: absolute;
             top: 0;
@@ -32,164 +44,217 @@
             width: 100% !important;
             height: 100% !important;
             object-fit: cover !important;
-            z-index: -10 !important;
-            /* Way behind */
+            z-index: -2 !important;
             display: block !important;
             opacity: 1 !important;
         }
 
-        /* The AR Canvas (3D Objects) */
+        /* 
+           3D SCENE (The "Magic")
+           MindAR Canvas. z-index: -1 (Above video, below UI)
+        */
         .a-canvas {
-            z-index: 1 !important;
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100% !important;
+            height: 100% !important;
+            z-index: -1 !important;
             background: transparent !important;
         }
 
-        /* Overlay Styles */
-        #scan-overlay {
+        /* 
+           UI OVERLAY (The "Glassmorphism")
+           z-index: 100
+        */
+        #ui-overlay {
             position: fixed;
             top: 0;
             left: 0;
             width: 100%;
             height: 100%;
-            background: #000;
-            /* Black initially */
             display: flex;
             flex-direction: column;
             justify-content: center;
             align-items: center;
-            z-index: 9999;
-            color: #fff;
+            z-index: 100;
+
+            /* Glass Effect */
+            background: rgba(15, 15, 15, 0.6);
+            backdrop-filter: blur(15px);
+            -webkit-backdrop-filter: blur(15px);
+            transition: opacity 0.6s ease-in-out;
+        }
+
+        .logo-box {
+            margin-bottom: 40px;
+            width: 120px;
+            height: 120px;
+            border-radius: 20px;
+            overflow: hidden;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+        }
+
+        .logo-box img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
         }
 
         .btn-start {
-            margin-top: 20px;
-            padding: 15px 30px;
-            background: #FFD700;
+            padding: 18px 40px;
+            background: linear-gradient(135deg, #FFD700 0%, #FFA500 100%);
             color: #000;
             border: none;
-            border-radius: 5px;
+            border-radius: 50px;
             font-size: 18px;
-            font-weight: bold;
+            font-weight: 600;
+            letter-spacing: 0.5px;
             cursor: pointer;
+            box-shadow: 0 8px 20px rgba(255, 215, 0, 0.3);
+            transform: scale(1);
+            transition: transform 0.2s, box-shadow 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 10px;
         }
 
-        /* 3. On-Screen Debugger (CRITICAL) */
-        #debug-console {
+        .btn-start:active {
+            transform: scale(0.96);
+            box-shadow: 0 4px 10px rgba(255, 215, 0, 0.2);
+        }
+
+        .instruction-text {
+            margin-top: 20px;
+            color: rgba(255, 255, 255, 0.7);
+            font-size: 14px;
+            font-weight: 300;
+        }
+
+        /* Loading Spinner inside overlay */
+        .loader {
+            width: 24px;
+            height: 24px;
+            border: 3px solid rgba(0, 0, 0, 0.1);
+            border-top: 3px solid #000;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            display: none;
+            /* hidden by default */
+        }
+
+        @keyframes spin {
+            100% {
+                transform: rotate(360deg);
+            }
+        }
+
+        /* Error Toast */
+        #error-toast {
             position: fixed;
-            bottom: 0;
-            left: 0;
-            width: 100%;
-            height: 150px;
-            background: rgba(0, 0, 0, 0.7);
-            color: #0f0;
-            /* Matrix green */
-            font-size: 12px;
-            padding: 10px;
-            overflow-y: scroll;
-            z-index: 10000;
-            pointer-events: none;
-            /* Let touches pass through */
-            border-top: 2px solid #FFD700;
-            display: block;
-            /* Always visible for now */
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(255, 50, 50, 0.9);
+            color: white;
+            padding: 12px 24px;
+            border-radius: 30px;
+            font-size: 14px;
+            display: none;
+            z-index: 200;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
         }
     </style>
 </head>
 
 <body>
 
-    <!-- Debug Console -->
-    <div id="debug-console">
-        <div>> System Init...</div>
-        <div>> Waiting for User to Start...</div>
+    <!-- UI LAYER -->
+    <div id="ui-overlay">
+        <div class="logo-box">
+            <img src="/watermark_logo.png" alt="Logo">
+        </div>
+
+        <button class="btn-start" id="btn-start">
+            <div class="loader" id="btn-loader"></div>
+            <span id="btn-text">🎁 Sovg'ani Ochish</span>
+        </button>
+
+        <p class="instruction-text">Kamerani rasmga qarating</p>
     </div>
 
-    <!-- Start Overlay -->
-    <div id="scan-overlay">
-        <h2>PINHAN BOX</h2>
-        <p>AR Kamera Tizimi</p>
-        <button class="btn-start" id="btn-init">KAMERANI OCHISH</button>
-    </div>
+    <!-- FEEDBACK LAYER -->
+    <div id="error-toast"></div>
 
-    <!-- AR Container -->
-    <div id="ar-container" style="width: 100%; height: 100%;"></div>
+    <!-- AR LAYER -->
+    <div id="ar-container"></div>
 
     <script>
-        const debugDiv = document.getElementById('debug-console');
-        const overlay = document.getElementById('scan-overlay');
-        const btnInit = document.getElementById('btn-init');
+        // DOM Elements
+        const overlay = document.getElementById('ui-overlay');
+        const btnStart = document.getElementById('btn-start');
+        const btnText = document.getElementById('btn-text');
+        const btnLoader = document.getElementById('btn-loader');
         const arContainer = document.getElementById('ar-container');
+        const errorToast = document.getElementById('error-toast');
+
+        // URL Params
         const uuid = new URLSearchParams(window.location.search).get('id');
 
-        // Logger Function
-        function log(msg, type = 'info') {
-            const line = document.createElement('div');
-            line.innerText = `> ${msg}`;
-            if (type === 'error') line.style.color = '#ff4444';
-            debugDiv.appendChild(line);
-            debugDiv.scrollTop = debugDiv.scrollHeight;
-            console.log(msg);
+        // Toast Helper
+        function showError(msg) {
+            errorToast.innerText = msg;
+            errorToast.style.display = 'block';
+            setTimeout(() => errorToast.style.display = 'none', 4000);
         }
 
-        // Global Error Listeners
-        window.onerror = function (msg, url, line) {
-            log(`GLOBAL ERROR: ${msg} (Line ${line})`, 'error');
-        };
-
-        window.addEventListener('unhandledrejection', event => {
-            log(`PROMISE ERROR: ${event.reason}`, 'error');
-        });
-
-        // 1. Fetch Data
+        // Initialize
         async function init() {
-            if (!uuid) return log("No ID provided!", 'error');
+            if (!uuid) return showError("ID topilmadi. QR kodni qayta tekshiring.");
 
             try {
-                log(`Fetching project ${uuid}...`);
+                // 1. Fetch Data
+                // btnText.innerText = "Yuklanmoqda...";
                 const res = await fetch(`/api/project/${uuid}`);
-                if (!res.ok) throw new Error("API Error: " + res.status);
+                if (!res.ok) throw new Error("Tarmoq xatosi");
                 const data = await res.json();
 
-                log("Data loaded. Ready.");
-                btnInit.onclick = () => startAR(data);
+                // 2. Setup Button Action
+                btnStart.onclick = () => {
+                    startExperience(data);
+                };
+
             } catch (err) {
-                log("Init Fail: " + err.message, 'error');
+                showError("Xatolik: " + err.message);
             }
         }
 
-        // 2. Start AR
-        function startAR(data) {
-            log("User clicked START.");
+        function startExperience(data) {
+            // UI Feedback
+            btnText.style.display = 'none';
+            btnLoader.style.display = 'block';
 
-            // Hide overlay
-            overlay.style.display = 'none';
-            // Set body background transparent now
-            document.body.style.background = 'transparent';
-
-            // Calculate Aspect
+            // 3. Inject AR Scene
+            // Calculation
             const mRatio = data.markerRatio || 1.0;
             const vRatio = data.videoRatio || 1.0;
-            const pHeight = 1 / mRatio;
 
-            let repeat = "1 1", offset = "0 0";
-            if (vRatio > mRatio) {
-                const s = mRatio / vRatio;
-                repeat = `${s} 1`;
-                offset = `${(1 - s) / 2} 0`;
-            } else {
-                const s = vRatio / mRatio;
-                repeat = `1 ${s}`;
-                offset = `0 ${(1 - s) / 2}`;
-            }
+            // Object Fit Cover Logic for Plane
+            // Note: AR.js/A-Frame 'shader: flat' is simple. 
+            // We use standard UV mapping adjustments if ratios differ significantly.
+            // For Simplicity in this "Production" version, we assume smart fit 
+            // or just standard 1:1 mapping on the plane scaled to marker.
 
-            log("Injecting A-Scene...");
+            // If we want exact cover fill:
+            let scaleX = 1;
+            let scaleY = 1; // 1/mRatio
 
-            // Config: uiLoading: no to prevent conflicts
+            // We'll create the HTML string
             const sceneHTML = `
                 <a-scene 
-                    mindar-image="imageTargetSrc: ${data.mind}; uiLoading: no; uiScanning: no; uiError: no;" 
+                    mindar-image="imageTargetSrc: ${data.mind}; uiLoading: no; uiScanning: no; uiError: no; filterMinCF:0.0001; filterBeta: 0.001;" 
                     color-space="sRGB" 
-                    renderer="colorManagement: true, preserveDrawingBuffer: true" 
+                    renderer="colorManagement: true, physicallyCorrectLights: true, preserveDrawingBuffer: true" 
                     vr-mode-ui="enabled: false" 
                     device-orientation-permission-ui="enabled: false">
                     
@@ -201,43 +266,63 @@
 
                     <a-entity mindar-image-target="targetIndex: 0">
                         <a-plane 
-                            material="src: #ar-video; opacity: 1; transparent: false; repeat: ${repeat}; offset: ${offset}" 
+                            src="#ar-video" 
                             position="0 0 0" 
+                            height="${1 / mRatio}" 
                             width="1" 
-                            height="${pHeight}">
-                        </a-plane>
+                            rotation="0 0 0"
+                        ></a-plane>
                     </a-entity>
                 </a-scene>
             `;
 
             arContainer.innerHTML = sceneHTML;
 
-            // 3. User Gesture - Prime Video
+            // 4. Audio Unlock & Transition
             const video = document.getElementById('ar-video');
+
+            // Try to play immediately (muted) to unlock
+            video.muted = true;
             video.play().then(() => {
                 video.pause();
-                log("Content video primed.");
-            }).catch(e => log("Content video prime fail: " + e.message, 'error'));
+                video.muted = false; // Prepare for real playback
+                video.currentTime = 0;
 
-            // 4. Force Resize Hack
-            setTimeout(() => {
-                log("Triggering RESIZE event...");
-                window.dispatchEvent(new Event('resize'));
-            }, 500);
+                // Success: Hide Overlay
+                setTimeout(() => {
+                    overlay.style.opacity = '0';
+                    setTimeout(() => overlay.remove(), 600); // Remove from DOM
+                }, 500);
 
-            // Listen for MindAR events
+            }).catch(e => {
+                showError("Kamera yoki Audio xatosi: " + e.message);
+                // Still try to hide overlay so they can see something
+                setTimeout(() => overlay.style.opacity = '0', 500);
+            });
+
+            // 5. Logic: Play on Found, Pause on Lost
             const scene = document.querySelector('a-scene');
 
             scene.addEventListener('arReady', () => {
-                log("EVENT: arReady (Camera should be starting)");
+                console.log("AR Ready");
             });
 
-            scene.addEventListener('arError', (e) => {
-                log("EVENT: arError - " + (e.detail ? e.detail.error : 'Unknown'), 'error');
+            scene.addEventListener('loaded', () => {
+                const target = document.querySelector('[mindar-image-target]');
+
+                target.addEventListener('targetFound', () => {
+                    video.play();
+                });
+
+                target.addEventListener('targetLost', () => {
+                    video.pause();
+                });
             });
         }
 
+        // Run
         init();
+
     </script>
 </body>
 
