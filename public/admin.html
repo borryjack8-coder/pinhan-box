@@ -501,7 +501,8 @@
         }
 
         async function logout() {
-            await fetch('/api/logout', { method: 'POST' });
+            // Clear cookies
+            document.cookie = "admin_auth=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
             location.reload();
         }
 

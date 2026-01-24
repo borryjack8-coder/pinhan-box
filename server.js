@@ -71,7 +71,12 @@ const isAdmin = (req, res, next) => {
 
 // --- ROUTES ---
 
-// 1. Root Route
+// 1. Check Auth Route (Fix for "Login topilmadi")
+app.get('/api/check-auth', isAdmin, (req, res) => {
+    res.json({ authenticated: true, user: req.cookies.admin_user || 'Admin' });
+});
+
+// 2. Root Route
 app.get('/', (req, res) => {
     res.send('Pinhan Box Server is Running 24/7');
 });
@@ -87,16 +92,20 @@ app.post('/upload', upload.single('file'), (req, res) => {
 // Login
 app.post('/api/v1/login', (req, res) => {
     const { username, password } = req.body;
-    const inputUser = (username || '').toLowerCase().trim();
-    const inputPass = (password || '').toLowerCase().trim();
-    const validUsers = ['pinhanbox', 'admin'];
-    const validPasswords = ['pinhan1904', 'bobur1904', 'admin123'];
+    
+    // Get credentials from env or fallback to defaults (for safety)
+    const validUser = (process.env.ADMIN_USERNAME || 'admin').toLowerCase();
+    const validPass = (process.env.ADMIN_PASSWORD || 'admin123');
 
-    if (validUsers.includes(inputUser) && validPasswords.includes(inputPass)) {
+    const inputUser = (username || '').toLowerCase().trim();
+    const inputPass = (password || '').trim();
+
+    if (inputUser === validUser && inputPass === validPass) {
         res.cookie('admin_auth', 'true', { maxAge: 2592000000, path: '/' });
+        res.cookie('admin_user', inputUser, { maxAge: 2592000000, path: '/' });
         res.json({ success: true });
     } else {
-        res.status(401).json({ error: 'Login xatosi' });
+        res.status(401).json({ error: 'Login xatosi: Parol yoki Login noto\'g\'ri' });
     }
 });
 
