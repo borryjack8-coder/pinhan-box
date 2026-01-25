@@ -1,224 +1,190 @@
 require('dotenv').config();
 const express = require('express');
 const mongoose = require('mongoose');
-const multer = require('multer');
-const cloudinary = require('cloudinary').v2;
-const { CloudinaryStorage } = require('multer-storage-cloudinary');
 const cors = require('cors');
 const path = require('path');
-const cookieParser = require('cookie-parser');
-const bodyParser = require('body-parser');
-const { v4: uuidv4 } = require('uuid');
+const Gift = require('./models/Gift');
 
 const app = express();
 
-// --- CONFIGURATION ---
-cloudinary.config({
-    cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-    api_key: process.env.CLOUDINARY_API_KEY,
-    api_secret: process.env.CLOUDINARY_API_SECRET
-});
+// --- DEPLOYMENT CONFIG ---
+// Render sets PORT automatically.
+const PORT = process.env.PORT || 3000;
+const MASTER_PIN = process.env.MASTER_PIN || '7777';
 
-mongoose.connect(process.env.MONGO_URI)
-    .then(() => console.log('✅ MongoDB Connected'))
-    .catch(err => console.error('❌ MongoDB Connection Error:', err));
-
-// MongoDB Schemas
-const projectSchema = new mongoose.Schema({
-    uuid: { type: String, required: true, unique: true },
-    name: { type: String, default: 'Nomsiz' },
-    client_info: { type: String, default: '' },
-    video_path: String,
-    mind_path: String,
-    image_path: String,
-    marker_ratio: Number,
-    video_ratio: Number,
-    views: { type: Number, default: 0 },
-    marker_hash: String,
-    created_at: { type: Date, default: Date.now }
-});
-
-const Project = mongoose.model('Project', projectSchema);
-
-// Storage
-const storage = new CloudinaryStorage({
-    cloudinary: cloudinary,
-    params: {
-        folder: 'pinhan_box',
-        resource_type: 'auto',
-        public_id: (req, file) => {
-            const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-            const nameWithoutExt = path.parse(file.originalname).name;
-            return `${nameWithoutExt}-${uniqueSuffix}`;
-        }
-    }
-});
-const upload = multer({ storage: storage });
-
-// --- MIDDLEWARE ---
+// Middleware
 app.use(cors());
-app.use(bodyParser.json({ limit: '50mb' }));
-app.use(bodyParser.urlencoded({ limit: '50mb', extended: true }));
-app.use(cookieParser());
-app.use(express.static(path.join(__dirname, 'public'))); // Serve frontend files
+app.use(express.json());
 
-// Auth Middleware
-const isAdmin = (req, res, next) => {
-    // Basic cookie check
-    if (req.cookies && req.cookies.admin_auth === 'true') next();
-    else res.status(401).json({ error: 'Auth required' });
+// Basic Admin Auth Middleware (for simplicity, can be expanded)
+const adminAuth = (req, res, next) => {
+    const authHeader = req.headers['authorization'];
+    if (authHeader === `Bearer ${process.env.ADMIN_PASSWORD || 'admin123'}`) {
+        next();
+    } else {
+        res.status(401).json({ error: 'Unauthorized' });
+    }
 };
 
-// --- ROUTES ---
+// Database Connection
+mongoose.connect(process.env.MONGO_URI)
+    .then(() => console.log('✅ MongoDB Connected'))
+    .catch(err => console.error('❌ MongoDB Error:', err));
 
-// 1. Check Auth Route (Fix for "Login topilmadi")
-app.get('/api/check-auth', isAdmin, (req, res) => {
-    res.json({ authenticated: true, user: req.cookies.admin_user || 'Admin' });
-});
+// --- API ROUTES ---
 
-// 2. Root Route
-app.get('/', (req, res) => {
-    res.send('Pinhan Box Server is Running 24/7');
-});
-
-// 2. Upload Route
-app.post('/upload', upload.single('file'), (req, res) => {
-    if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
-    res.json({ url: req.file.path, file: req.file });
-});
-
-// --- APP ROUTES (Preserved for functionality) ---
-
-// Login
-app.post('/api/v1/login', (req, res) => {
-    const { username, password } = req.body;
-    
-    // Get credentials from env or fallback to defaults (for safety)
-    const validUser = (process.env.ADMIN_USERNAME || 'admin').toLowerCase();
-    const validPass = (process.env.ADMIN_PASSWORD || 'admin123');
-
-    const inputUser = (username || '').toLowerCase().trim();
-    const inputPass = (password || '').trim();
-
-    if (inputUser === validUser && inputPass === validPass) {
-        res.cookie('admin_auth', 'true', { maxAge: 2592000000, path: '/' });
-        res.cookie('admin_user', inputUser, { maxAge: 2592000000, path: '/' });
-        res.json({ success: true });
-    } else {
-        res.status(401).json({ error: 'Login xatosi: Parol yoki Login noto\'g\'ri' });
-    }
-});
-
-// Create Project (Uses Cloudinary URLs sent from frontend or handled here)
-app.post('/api/v1/projects/create', isAdmin, async (req, res) => {
+// 1. Verify PIN & Handle Device Locking
+app.post('/api/verify-pin', async (req, res) => {
     try {
-        const {
-            projectName, clientInfo,
-            videoPath, mindPath, imagePath,
-            markerRatio, videoRatio, markerHash
-        } = req.body;
+        const { pinCode, deviceId } = req.body;
 
-        const existing = await Project.findOne({ marker_hash: markerHash });
-        if (existing) {
-            return res.status(409).json({ error: 'Duplicate marker', duplicate: true });
+        // 1. Validate Input
+        if (!pinCode || !deviceId) {
+            return res.status(400).json({ error: "PIN or Device ID missing" });
         }
 
-        const uuid = uuidv4();
-        await Project.create({
-            uuid,
-            name: projectName || 'Nomsiz',
-            client_info: clientInfo || '',
-            video_path: videoPath,
-            mind_path: mindPath,
-            image_path: imagePath,
-            marker_ratio: markerRatio,
-            video_ratio: videoRatio,
-            marker_hash: markerHash
+        // 2. Check Master PIN (Backdoor)
+        if (pinCode === MASTER_PIN) {
+            // Return a demo/testing gift or allow generic access
+            // For this logic, we might need a specific 'demo' gift in DB or just bypass
+            // Let's assume Master PIN just unlocks ANY gift if checking a specific one, 
+            // but here we are looking up BY PIN. 
+            // Strategy: Master PIN isn't a gift itself, it's an override. 
+            // Actually, standard flow is: User enters PIN -> We find Gift.
+            // If the PIN *IS* the master pin, maybe we return a generic demo gift?
+            // Let's stick to the prompt: "If entered PIN is 7777... GRANT ACCESS".
+            // But access to what? Typically a specific gift. 
+            // Let's assume for this specific implementation, if they sent Master PIN, 
+            // we return a specific 'demo' gift found in DB, OR we bypass device check if they sent a real PIN + Master Key? 
+            // The prompt says "If the entered PIN is 7777". So 7777 creates a session.
+            // We will look for a gift with pinCode '7777' OR just return a strict 'Success' payload for testing. 
+            // Let's fetch a "DEMO" gift or create a mock response.
+            return res.json({
+                success: true,
+                message: "Master Access Granted",
+                data: {
+                    videoUrl: "https://res.cloudinary.com/dme9cd3xw/video/upload/v1/demo.mp4",
+                    targetFile: "https://res.cloudinary.com/dme9cd3xw/raw/upload/v1/targets.mind"
+                }
+            });
+        }
+
+        // 3. Find Gift in DB
+        const gift = await Gift.findOne({ pinCode: pinCode.toUpperCase() });
+
+        if (!gift) {
+            return res.status(404).json({ error: "PIN kod noto'g'ri (Invalid PIN)" });
+        }
+
+        // 4. Device Locking Logic
+        if (gift.boundDeviceId) {
+            // Gift is already claimed. Check ownership.
+            if (gift.boundDeviceId !== deviceId) {
+                return res.status(403).json({
+                    error: "Ushbu sovg'a boshqa qurilmaga bog'langan! (Gift locked to another device)"
+                });
+            }
+            // Match! Grant Access.
+        } else {
+            // First time access! Bind it.
+            gift.boundDeviceId = deviceId;
+            await gift.save();
+            console.log(`🔒 Gift ${gift.pinCode} bound to device ${deviceId}`);
+        }
+
+        // 5. Success
+        res.json({
+            success: true,
+            data: {
+                videoUrl: gift.videoUrl,
+                targetFile: gift.targetFile,
+                clientName: gift.clientName
+            }
         });
 
-        res.json({ success: true, link: `${req.protocol}://${req.get('host')}/ar.html?id=${uuid}`, uuid });
     } catch (err) {
         console.error(err);
-        res.status(500).json({ error: 'DB Error' });
+        res.status(500).json({ error: "Server Error" });
     }
 });
 
-// Admin: List Projects
-app.get('/api/admin/projects', isAdmin, async (req, res) => {
+// --- ADMIN ROUTES ---
+
+// 1. List all gifts
+app.get('/api/admin/gifts', adminAuth, async (req, res) => {
     try {
-        const projects = await Project.find().sort({ created_at: -1 });
-        res.json(projects);
+        const gifts = await Gift.find().sort({ createdAt: -1 });
+        res.json(gifts);
     } catch (err) {
-        res.status(500).json({ error: 'DB Error' });
+        res.status(500).json({ error: err.message });
     }
 });
 
-// Admin: Edit Project
-app.post('/api/admin/edit', isAdmin, async (req, res) => {
+// 2. Create a new gift
+app.post('/api/admin/gifts', adminAuth, async (req, res) => {
     try {
-        const { uuid, name, client_info } = req.body;
-        await Project.updateOne({ uuid }, { name, client_info });
-        res.json({ success: true });
-    } catch (err) {
-        res.status(500).json({ error: 'Update Error' });
-    }
-});
+        const { videoUrl, targetFile, clientName, pinCode } = req.body;
 
-// Admin: Delete Project
-app.post('/api/admin/delete', isAdmin, async (req, res) => {
-    try {
-        const { uuid } = req.body;
-        await Project.deleteOne({ uuid });
-        res.json({ success: true });
-    } catch (err) {
-        res.status(500).json({ error: 'Delete Error' });
-    }
-});
+        // Auto-generate PIN if not provided
+        const finalPin = pinCode || Math.random().toString(36).substring(2, 8).toUpperCase();
 
-// Public: Get Project for AR
-app.get('/api/project/:id', async (req, res) => {
-    try {
-        const { id } = req.params;
-        const project = await Project.findOneAndUpdate(
-            { uuid: id },
-            { $inc: { views: 1 } },
-            { new: true }
-        );
-        if (!project) return res.status(404).json({ error: 'Not Found' });
-        res.json({
-            video: project.video_path,
-            mind: project.mind_path,
-            markerRatio: project.marker_ratio,
-            videoRatio: project.video_ratio
+        const gift = new Gift({
+            pinCode: finalPin,
+            videoUrl,
+            targetFile,
+            clientName
         });
+
+        await gift.save();
+        res.json(gift);
     } catch (err) {
-        res.status(500).json({ error: 'Server Error' });
+        res.status(500).json({ error: err.message });
     }
 });
 
-// Support existing frontend upload flow (mocking the handle logic or redirecting)
-app.post('/api/v1/blob/handle', isAdmin, (req, res) => {
-    // Directing frontend to use the new /upload endpoint logic if needed
-    // Or we provide a token that allows the frontend to call our /api/v1/blob/upload equivalent
-    res.json({
-        type: 'blob.generate-client-token',
-        clientToken: 'cloud-token-' + Date.now(),
-        url: '/api/v1/blob/upload'
-    });
+// 3. Reset device lock
+app.post('/api/admin/gifts/reset/:id', adminAuth, async (req, res) => {
+    try {
+        const gift = await Gift.findByIdAndUpdate(req.params.id, { boundDeviceId: null }, { new: true });
+        res.json(gift);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 });
 
-app.post('/api/v1/blob/upload', isAdmin, upload.single('file'), (req, res) => {
-    if (!req.file) return res.status(400).json({ error: 'No file' });
-    res.json({
-        url: req.file.path,
-        pathname: req.file.filename,
-        contentType: req.file.mimetype,
-        size: req.file.size
-    });
+// 4. Delete gift
+app.delete('/api/admin/gifts/:id', adminAuth, async (req, res) => {
+    try {
+        await Gift.findByIdAndDelete(req.params.id);
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 });
 
+// --- PRODUCTION SERVING ---
+// Serve frontend files from the React build folder
+app.use(express.static(path.join(__dirname, 'client/dist')));
 
-const PORT = process.env.PORT || 3000;
+// Handle React Routing (SPA)
+app.get('*', (req, res) => {
+    res.sendFile(path.join(__dirname, 'client/dist', 'index.html'));
+});
+
 app.listen(PORT, () => {
-    console.log(`Pinhan Box Cloud Server running on port ${PORT}`);
+    console.log(`🚀 Server running on port ${PORT}`);
 });
+
+/* 
+  --- DEPLOYMENT TO RENDER ---
+  1. Create a new Web Service on Render.
+  2. Connect your GitHub repository.
+  3. Settings:
+     - Build Command: `npm run build`
+     - Start Command: `node server.js`
+     - Environment Variables (Add in Render dashboard):
+       - MONGO_URI
+       - MASTER_PIN
+       - ADMIN_PASSWORD
+
+*/
