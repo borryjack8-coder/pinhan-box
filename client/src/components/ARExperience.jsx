@@ -113,13 +113,38 @@ const ARExperience = ({ videoUrl, targetFile }) => {
     };
 
     return (
-        <div style={{ width: '100%', height: '100%' }}>
+        <div style={{ width: '100%', height: '100%', position: 'relative', overflow: 'hidden', background: '#000' }}>
+
+            {/* INJECT GLOBAL STYLES FOR CAMERA FEED */}
+            <style dangerouslySetInnerHTML={{
+                __html: `
+                video {
+                    position: absolute !important;
+                    top: 0 !important;
+                    left: 0 !important;
+                    width: 100% !important;
+                    height: 100% !important;
+                    object-fit: cover !important;
+                    z-index: -2 !important;
+                }
+                .a-canvas {
+                    z-index: -1 !important;
+                }
+            `}} />
+
             {/* START OVERLAY */}
             {!started && (
                 <div style={styles.overlay}>
+                    <div style={styles.logoContainer}>
+                        <img src="/logo.png" alt="Logo" style={styles.logo} />
+                    </div>
+
                     <button onClick={handleStart} style={styles.startButton}>
-                        BOSHLASH (START EXPERINCE)
+                        <span>START CAMERA</span>
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg>
                     </button>
+
+                    <p style={styles.instruction}>Tayyor bo'lsangiz, tugmani bosing</p>
                 </div>
             )}
 
@@ -130,29 +155,24 @@ const ARExperience = ({ videoUrl, targetFile }) => {
                         onClick={recording ? stopRecording : startRecording}
                         style={{
                             ...styles.recButton,
-                            backgroundColor: recording ? '#ff4444' : '#fff'
+                            backgroundColor: recording ? '#ff4444' : 'rgba(255,255,255,0.9)',
+                            color: recording ? '#fff' : '#000'
                         }}
                     >
-                        {recording ? 'STOP' : ''}
+                        {recording ? 'STOP' : 'REC'}
                     </button>
                 </div>
             )}
 
             {/* A-FRAME SCENE */}
-            {/* Note: In React, we inject the raw HTML or use 'dangerouslySetInnerHTML' if using vanilla string, 
-          OR use standard JSX if A-Frame elements are registered. 
-          Assuming standard JSX usage for simplicity (requires aframe-react usually, or just raw elements). 
-          We'll use raw elements since A-Frame creates custom elements. */}
-            {/* We must inject the mindar attributes carefully. */}
-
             <a-scene
                 ref={sceneRef}
-                mindar-image={`imageTargetSrc: ${targetFile}; uiLoading: no; uiScanning: no;`}
+                mindar-image={`imageTargetSrc: ${targetFile}; uiLoading: no; uiScanning: no; uiError: no; filterMinCF:0.0001; filterBeta: 0.001;`}
                 color-space="sRGB"
                 renderer="colorManagement: true, physicallyCorrectLights: true"
                 vr-mode-ui="enabled: false"
                 device-orientation-permission-ui="enabled: false"
-                style={{ position: 'absolute', top: 0, left: 0, zIndex: 1 }}
+                style={{ position: 'absolute', top: 0, left: 0, zIndex: -1 }}
             >
                 <a-assets>
                     <video
@@ -185,25 +205,43 @@ const ARExperience = ({ videoUrl, targetFile }) => {
 const styles = {
     overlay: {
         position: 'fixed', top: 0, left: 0, width: '100%', height: '100%',
-        background: 'rgba(0,0,0,0.8)', zIndex: 999,
-        display: 'flex', justifyContent: 'center', alignItems: 'center'
+        background: 'rgba(10, 10, 10, 0.95)', zIndex: 9999,
+        display: 'flex', flexDirection: 'column',
+        justifyContent: 'center', alignItems: 'center',
+        padding: '20px', textAlign: 'center'
+    },
+    logoContainer: {
+        width: '100%', maxWidth: '280px', marginBottom: '40px'
+    },
+    logo: {
+        width: '80%', height: 'auto', borderRadius: '24px',
+        boxShadow: '0 15px 45px rgba(0,0,0,0.6)'
     },
     startButton: {
-        padding: '20px 40px', fontSize: '20px', fontWeight: 'bold',
-        background: '#FFD700', border: 'none', borderRadius: '50px',
-        cursor: 'pointer'
+        padding: '18px 45px', fontSize: '18px', fontWeight: 'bold',
+        background: 'linear-gradient(135deg, #FFD700 0%, #FFA500 100%)',
+        color: '#000', border: 'none', borderRadius: '50px',
+        cursor: 'pointer', boxShadow: '0 10px 30px rgba(255, 215, 0, 0.3)',
+        display: 'flex', alignItems: 'center', gap: '12px',
+        letterSpacing: '1px'
+    },
+    instruction: {
+        marginTop: '25px', color: 'rgba(255,255,255,0.6)',
+        fontSize: '14px', fontWeight: '300'
     },
     recContainer: {
-        position: 'fixed', bottom: '30px', left: '0', width: '100%',
-        display: 'flex', justifyContent: 'center', zIndex: 999,
-        pointerEvents: 'none' // allow click through
+        position: 'fixed', bottom: '40px', left: '0', width: '100%',
+        display: 'flex', justifyContent: 'center', zIndex: 1000,
+        pointerEvents: 'none'
     },
     recButton: {
-        width: '70px', height: '70px', borderRadius: '50%',
-        border: '4px solid white',
+        width: '75px', height: '75px', borderRadius: '50%',
+        border: '5px solid #fff',
         pointerEvents: 'auto', cursor: 'pointer',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
-        fontWeight: 'bold', fontSize: '12px'
+        fontWeight: 'bold', fontSize: '14px',
+        boxShadow: '0 5px 20px rgba(0,0,0,0.4)',
+        transition: 'all 0.2s'
     }
 };
 
