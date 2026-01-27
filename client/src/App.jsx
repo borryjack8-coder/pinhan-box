@@ -1,31 +1,48 @@
-import React, { useState, useEffect } from 'react';
 import ARExperience from './components/ARExperience';
 import AdminPanel from './components/AdminPanel';
+import QRScanner from './components/QRScanner';
 import { v4 as uuidv4 } from 'uuid';
+import { Toaster, toast } from 'react-hot-toast';
+import { motion, AnimatePresence } from 'framer-motion';
 
 function App() {
     const [step, setStep] = useState('pin');
     const [pin, setPin] = useState('');
     const [error, setError] = useState('');
     const [giftData, setGiftData] = useState(null);
+    const [showScanner, setShowScanner] = useState(false);
+    const [settings, setSettings] = useState({ telegram: '', instagram: '', phone: '' });
 
     // Simple Path Routing
     const isInternalAdmin = window.location.pathname === '/admin';
 
-    // Initialize Device ID
+    // Initialize Device ID & Settings
     useEffect(() => {
         let devId = localStorage.getItem('pinhan_device_id');
         if (!devId) {
             devId = uuidv4();
             localStorage.setItem('pinhan_device_id', devId);
         }
+
+        // Fetch Settings
+        fetch('/api/settings')
+            .then(res => res.json())
+            .then(data => setSettings(data));
+
+        // Check for ID in URL on load
+        const urlParams = new URLSearchParams(window.location.search);
+        const urlId = urlParams.get('id');
+        if (urlId) {
+            handleVerify(null, urlId);
+        }
     }, []);
 
-    const handleVerify = async () => {
-        if (!pin) return;
+    const handleVerify = async (e, directId) => {
+        const targetPin = directId || pin;
+        if (!targetPin) return;
 
         setStep('loading');
-        setError('');
+        toast.loading('Sovg\'a qidirilmoqda...', { id: 'auth' });
 
         const deviceId = localStorage.getItem('pinhan_device_id');
 
@@ -40,14 +57,14 @@ function App() {
 
             if (data.success) {
                 setGiftData(data.data);
-                // Fake loading delay for better UX (prevent flash)
-                setTimeout(() => setStep('ar'), 1500);
+                toast.success('Sovg\'a topildi!', { id: 'auth' });
+                setTimeout(() => setStep('ar'), 1000);
             } else {
-                setError(data.error || "Xatolik yuz berdi");
+                toast.error(data.error || "PIN xato", { id: 'auth' });
                 setStep('pin');
             }
         } catch (err) {
-            setError("Tarmoq xatosi (Network Error)");
+            toast.error("Tarmoq xatosi", { id: 'auth' });
             setStep('pin');
         }
     };
@@ -59,44 +76,95 @@ function App() {
 
     // PUBLIC VIEW
     return (
-        <div className="app-container" style={{ width: '100vw', height: '100vh', background: '#000', color: '#fff', overflow: 'hidden' }}>
+        <div className="app-container" style={{ width: '100vw', height: '100vh', background: 'var(--bg-color)', color: '#fff', overflow: 'hidden' }}>
+            <Toaster position="top-center" reverseOrder={false} />
 
-            {/* 1. PIN ENTRY SCREEN */}
-            {step === 'pin' && (
-                <div style={styles.centerCol}>
-                    <h1 style={{ color: '#FFD700', marginBottom: '10px' }}>PINHAN BOX</h1>
-                    <p style={{ color: '#aaa', marginBottom: '30px', fontSize: '14px' }}>Sovg'ani ochish uchun PIN kodni kiriting</p>
+            <AnimatePresence mode="wait">
+                {/* 1. PIN ENTRY SCREEN */}
+                {step === 'pin' && (
+                    <motion.div
+                        key="pin"
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, scale: 0.95 }}
+                        className="center-col"
+                        style={styles.centerCol}
+                    >
+                        <div className="logo-section" style={{ marginBottom: '40px' }}>
+                            <img src="/logo.png" alt="Logo" style={{ width: '120px', height: 'auto', borderRadius: '20px', marginBottom: '15px' }} />
+                            <h1 style={{ color: 'var(--primary)', fontSize: '42px', fontWeight: 'bold', margin: 0 }}>PINHAN BOX</h1>
+                            <p style={{ color: 'var(--text-dim)', fontSize: '14px', letterSpacing: '1px' }}>PREMIUM AR EXPERIENCE</p>
+                        </div>
 
-                    <input
-                        type="text"
-                        value={pin}
-                        onChange={(e) => setPin(e.target.value.toUpperCase())}
-                        placeholder="000000"
-                        maxLength={10}
-                        style={styles.input}
-                    />
+                        <div className="glass-card glass" style={{ padding: '40px', width: '90%', maxWidth: '400px' }}>
+                            <p style={{ color: 'var(--text-dim)', marginBottom: '20px' }}>Sovg'ani ochish uchun PIN kodni kiriting</p>
 
-                    {error && <p style={{ color: '#ff4444', margin: '20px 0', fontSize: '14px' }}>{error}</p>}
+                            <input
+                                type="text"
+                                value={pin}
+                                onChange={(e) => setPin(e.target.value.toUpperCase())}
+                                placeholder="******"
+                                maxLength={10}
+                                style={styles.input}
+                            />
 
-                    <button onClick={handleVerify} style={styles.button}>
-                        OCHISH
-                    </button>
-                </div>
-            )}
+                            <button onClick={() => handleVerify()} className="btn-primary" style={{ ...styles.button, width: '100%' }}>
+                                OCHISH
+                            </button>
 
-            {/* 2. LOADING SCREEN */}
-            {step === 'loading' && (
-                <div style={styles.centerCol}>
-                    <div className="spinner" style={styles.spinner}></div>
-                    <h2 style={{ marginTop: '20px', color: '#FFD700', fontSize: '18px' }}>Tayyorlanmoqda...</h2>
-                </div>
-            )}
+                            <div style={{ margin: '30px 0', borderTop: '1px solid var(--glass-border)', position: 'relative' }}>
+                                <span style={{ position: 'absolute', top: '-10px', left: '50%', transform: 'translateX(-50%)', background: '#111', padding: '0 10px', fontSize: '12px', color: 'var(--text-dim)' }}>YOKI</span>
+                            </div>
 
-            {/* 3. AR EXPERIENCE */}
-            {step === 'ar' && giftData && (
-                <ARExperience
-                    videoUrl={giftData.videoUrl}
-                    targetFile={giftData.targetFile}
+                            <button onClick={() => setShowScanner(true)} className="nav-btn" style={{ width: '100%', borderColor: 'var(--primary)', color: 'var(--primary)' }}>
+                                QR KODNI SKANERLASH
+                            </button>
+                        </div>
+
+                        {/* Footer Contacts */}
+                        <div style={{ position: 'fixed', bottom: '30px', display: 'flex', gap: '20px' }}>
+                            {settings.telegram && <a href={`https://t.me/${settings.telegram.replace('@', '')}`} target="_blank" className="nav-btn">Telegram</a>}
+                            {settings.instagram && <a href={`https://instagram.com/${settings.instagram}`} target="_blank" className="nav-btn">Instagram</a>}
+                        </div>
+                    </motion.div>
+                )}
+
+                {/* 2. LOADING SCREEN */}
+                {step === 'loading' && (
+                    <motion.div
+                        key="loading"
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        style={styles.centerCol}
+                    >
+                        <div className="loader" style={styles.spinner}></div>
+                        <h2 style={{ marginTop: '20px', color: 'var(--primary)', fontSize: '18px' }}>Tayyorlanmoqda...</h2>
+                    </motion.div>
+                )}
+
+                {/* 3. AR EXPERIENCE */}
+                {step === 'ar' && giftData && (
+                    <motion.div
+                        key="ar"
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        transition={{ duration: 1 }}
+                        style={{ width: '100%', height: '100%' }}
+                    >
+                        <ARExperience
+                            videoUrl={giftData.videoUrl}
+                            targetFile={giftData.targetFile}
+                        />
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
+            {showScanner && (
+                <QRScanner
+                    onScanSuccess={(id) => { handleVerify(null, id); setShowScanner(false); }}
+                    onScanError={() => { }}
+                    onClose={() => setShowScanner(false)}
                 />
             )}
         </div>

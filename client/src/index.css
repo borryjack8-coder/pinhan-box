@@ -1,18 +1,255 @@
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&display=swap');
+
 :root {
-  font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
-  line-height: 1.5;
-  font-weight: 400;
+  --bg-color: #050505;
+  --card-bg: rgba(255, 255, 255, 0.05);
+  --primary: #FFD700;
+  --primary-glow: rgba(255, 215, 0, 0.3);
+  --text-main: #ffffff;
+  --text-dim: #a0a0a0;
+  --danger: #ff4444;
+  --success: #00c851;
+  --glass: rgba(255, 255, 255, 0.03);
+  --glass-border: rgba(255, 255, 255, 0.1);
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
 }
 
 body {
-  margin: 0;
-  display: flex;
-  place-items: center;
-  min-width: 320px;
-  min-height: 100vh;
+  font-family: 'Outfit', sans-serif;
+  background: var(--bg-color);
+  color: var(--text-main);
+  line-height: 1.6;
+  overflow-x: hidden;
 }
 
 #root {
   width: 100%;
-  height: 100vh;
+}
+
+/* Glassmorphism Classes */
+.glass {
+  background: var(--glass);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid var(--glass-border);
+  border-radius: 24px;
+}
+
+/* Admin Panel Layout */
+.admin-page {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.admin-header {
+  padding: 20px 40px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid var(--glass-border);
+}
+
+.admin-nav {
+  display: flex;
+  gap: 15px;
+  padding: 20px 40px;
+  overflow-x: auto;
+}
+
+.nav-btn {
+  background: transparent;
+  border: 1px solid var(--glass-border);
+  color: var(--text-dim);
+  padding: 10px 24px;
+  border-radius: 50px;
+  cursor: pointer;
+  font-weight: 500;
+  transition: all 0.3s ease;
+  white-space: nowrap;
+}
+
+.nav-btn.active {
+  background: var(--primary);
+  color: #000;
+  border-color: var(--primary);
+  box-shadow: 0 0 15px var(--primary-glow);
+}
+
+/* Dashboard Widgets */
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 25px;
+  padding: 20px 40px;
+}
+
+.stat-card {
+  background: var(--glass);
+  padding: 30px;
+  border-radius: 24px;
+  border: 1px solid var(--glass-border);
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+.stat-icon {
+  font-size: 32px;
+  background: rgba(255, 215, 0, 0.1);
+  width: 64px;
+  height: 64px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 16px;
+}
+
+.stat-info h4 {
+  color: var(--text-dim);
+  font-size: 14px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.stat-info p {
+  font-size: 32px;
+  font-weight: 700;
+  color: var(--primary);
+}
+
+/* Gifts List Grid */
+.gifts-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 30px;
+  padding: 20px 40px;
+}
+
+.gift-card {
+  background: var(--glass);
+  border: 1px solid var(--glass-border);
+  border-radius: 24px;
+  padding: 25px;
+  transition: transform 0.3s ease, border-color 0.3s ease;
+  position: relative;
+}
+
+.gift-card:hover {
+  transform: translateY(-5px);
+  border-color: var(--primary);
+}
+
+.pin-badge {
+  background: var(--primary);
+  color: #000;
+  padding: 4px 12px;
+  border-radius: 8px;
+  font-weight: 700;
+  font-size: 14px;
+}
+
+.status-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  position: absolute;
+  top: 25px;
+  right: 25px;
+}
+
+.status-dot.locked {
+  background: var(--danger);
+  box-shadow: 0 0 10px var(--danger);
+}
+
+.status-dot.unlocked {
+  background: var(--success);
+  box-shadow: 0 0 10px var(--success);
+}
+
+/* Buttons */
+.btn-primary {
+  background: var(--primary);
+  color: #000;
+  border: none;
+  padding: 14px 32px;
+  border-radius: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.btn-primary:hover {
+  box-shadow: 0 0 20px var(--primary-glow);
+  transform: scale(1.02);
+}
+
+/* Modals */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.8);
+  backdrop-filter: blur(5px);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.modal-content {
+  background: #111;
+  border: 1px solid var(--glass-border);
+  border-radius: 32px;
+  width: 90%;
+  max-width: 500px;
+  padding: 40px;
+  text-align: center;
+}
+
+/* Forms */
+.form-group {
+  margin-bottom: 20px;
+  text-align: left;
+}
+
+.form-group label {
+  display: block;
+  color: var(--text-dim);
+  margin-bottom: 8px;
+  font-size: 14px;
+}
+
+.form-group input {
+  width: 100%;
+  background: #000;
+  border: 1px solid var(--glass-border);
+  color: #fff;
+  padding: 14px;
+  border-radius: 12px;
+  outline: none;
+}
+
+.form-group input:focus {
+  border-color: var(--primary);
+}
+
+@media (max-width: 768px) {
+  .admin-header {
+    padding: 15px 20px;
+  }
+
+  .admin-nav {
+    padding: 10px 20px;
+  }
+
+  .stats-grid,
+  .gifts-grid {
+    padding: 10px 20px;
+  }
 }

@@ -7,6 +7,7 @@ const multer = require('multer');
 const cloudinary = require('cloudinary').v2;
 const { CloudinaryStorage } = require('multer-storage-cloudinary');
 const Gift = require('./models/Gift');
+const Settings = require('./models/Settings');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -64,8 +65,12 @@ app.post('/api/verify-pin', async (req, res) => {
 
         if (!gift.boundDeviceId) {
             gift.boundDeviceId = deviceId;
-            await gift.save();
         }
+
+        // Increment Scan Count
+        gift.scanCount = (gift.scanCount || 0) + 1;
+        await gift.save();
+
         res.json({ success: true, data: gift });
     } catch (err) {
         res.status(500).json({ error: "Server Error" });
@@ -103,6 +108,51 @@ app.post('/api/admin/gifts/reset/:id', adminAuth, async (req, res) => {
 app.delete('/api/admin/gifts/:id', adminAuth, async (req, res) => {
     await Gift.findByIdAndDelete(req.params.id);
     res.json({ success: true });
+});
+
+// --- ANALYTICS ---
+app.get('/api/admin/analytics', adminAuth, async (req, res) => {
+    try {
+        const totalGifts = await Gift.countDocuments();
+        const gifts = await Gift.find();
+        const totalScans = gifts.reduce((acc, g) => acc + (g.scanCount || 0), 0);
+        const latestGifts = await Gift.find().sort({ createdAt: -1 }).limit(5);
+
+        res.json({
+            totalGifts,
+            totalScans,
+            latestGifts
+        });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// --- SETTINGS ---
+app.get('/api/settings', async (req, res) => {
+    try {
+        let settings = await Settings.findOne({ id: 'main_settings' });
+        if (!settings) {
+            settings = new Settings({});
+            await settings.save();
+        }
+        res.json(settings);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.post('/api/admin/settings', adminAuth, async (req, res) => {
+    try {
+        const updated = await Settings.findOneAndUpdate(
+            { id: 'main_settings' },
+            { ...req.body, updatedAt: Date.now() },
+            { new: true, upsert: true }
+        );
+        res.json(updated);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 });
 
 // Serving

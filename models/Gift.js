@@ -19,10 +19,18 @@ const giftSchema = new mongoose.Schema({
     createdAt: { type: Date, default: Date.now },
 
     // --- SECURITY: Device Locking ---
-    // If null, first device to access becomes the owner.
-    // If set, only this UUID is allowed (unless Master PIN used).
     boundDeviceId: {
         type: String,
+        default: null
+    },
+
+    // --- ANALYTICS & UI ---
+    scanCount: {
+        type: Number,
+        default: 0
+    },
+    thumbnailUrl: {
+        type: String, // Cloudinary URL for the marker image
         default: null
     }
 });
