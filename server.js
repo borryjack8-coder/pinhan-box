@@ -199,6 +199,11 @@ app.post('/api/admin/settings', adminAuth, async (req, res) => {
     }
 });
 
+// --- HEALTH CHECK ---
+app.get('/api/health', (req, res) => {
+    res.status(200).json({ status: 'healthy', timestamp: new Date().toISOString() });
+});
+
 // --- STATIC SERVING & SPA FALLBACK ---
 const clientDistPath = path.join(__dirname, 'client/dist');
 
