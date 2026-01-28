@@ -10,6 +10,8 @@ const Gift = require('./models/Gift');
 const Settings = require('./models/Settings');
 const { generateMindFile } = require('./services/mindCompiler');
 const fs = require('fs');
+const jwt = require('jsonwebtoken');
+const sharp = require('sharp');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -36,19 +38,76 @@ const upload = multer({ storage: storage });
 app.use(cors());
 app.use(express.json());
 
-// Admin Auth Middleware
+// JWT Auth Middleware
 const adminAuth = (req, res, next) => {
     const authHeader = req.headers['authorization'];
-    if (authHeader === `Bearer ${process.env.ADMIN_PASSWORD || 'admin123'}`) {
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        return res.status(401).json({ error: 'No token provided' });
+    }
+
+    const token = authHeader.substring(7); // Remove 'Bearer ' prefix
+    const secret = process.env.JWT_SECRET || 'default_secret_change_in_production';
+
+    try {
+        const decoded = jwt.verify(token, secret);
+        req.admin = decoded; // Attach admin info to request
         next();
-    } else {
-        res.status(401).json({ error: 'Unauthorized' });
+    } catch (err) {
+        res.status(401).json({ error: 'Invalid or expired token' });
     }
 };
 
+// Helper: Compress image using Sharp
+async function compressImage(imageUrl) {
+    console.log('📦 Compressing image:', imageUrl);
+    const response = await fetch(imageUrl);
+    if (!response.ok) throw new Error('Failed to download image');
+
+    const buffer = Buffer.from(await response.arrayBuffer());
+    const compressed = await sharp(buffer)
+        .resize(600, null, { withoutEnlargement: true, fit: 'inside' })
+        .jpeg({ quality: 85 })
+        .toBuffer();
+
+    console.log(`✅ Compressed: ${buffer.length} → ${compressed.length} bytes`);
+    return compressed;
+}
+
 mongoose.connect(process.env.MONGO_URI).then(() => console.log('✅ MongoDB Connected'));
 
+
 // --- API ---
+
+// Admin Login (JWT Generation)
+app.post('/api/admin/login', (req, res) => {
+    try {
+        const { password } = req.body;
+        const adminPassword = process.env.ADMIN_PASSWORD || 'admin123';
+
+        if (password !== adminPassword) {
+            return res.status(401).json({ error: 'Noto\'g\'ri parol' });
+        }
+
+        // Generate JWT token
+        const secret = process.env.JWT_SECRET || 'default_secret_change_in_production';
+        const expiresIn = process.env.JWT_EXPIRES_IN || '7d';
+
+        const token = jwt.sign(
+            { role: 'admin', timestamp: Date.now() },
+            secret,
+            { expiresIn }
+        );
+
+        res.json({
+            success: true,
+            token,
+            expiresIn
+        });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 
 app.post('/api/verify-pin', async (req, res) => {
     try {
@@ -95,11 +154,18 @@ app.post('/api/admin/generate-mind', adminAuth, async (req, res) => {
 
         console.log('🎯 Starting .mind file generation for:', imageUrl);
 
-        // Generate .mind file
-        const tempMindPath = `./temp_${Date.now()}.mind`;
-        await generateMindFile(imageUrl, tempMindPath);
+        // Step 1: Compress image to save RAM
+        const compressedBuffer = await compressImage(imageUrl);
 
-        // Upload .mind file to Cloudinary
+        // Step 2: Save compressed image temporarily
+        const tempImagePath = `./temp_compressed_${Date.now()}.jpg`;
+        fs.writeFileSync(tempImagePath, compressedBuffer);
+
+        // Step 3: Generate .mind file from compressed image
+        const tempMindPath = `./temp_${Date.now()}.mind`;
+        await generateMindFile(tempImagePath, tempMindPath);
+
+        // Step 4: Upload .mind file to Cloudinary
         const mindFileBuffer = fs.readFileSync(tempMindPath);
         const uploadResult = await new Promise((resolve, reject) => {
             const uploadStream = cloudinary.uploader.upload_stream(
@@ -117,15 +183,37 @@ app.post('/api/admin/generate-mind', adminAuth, async (req, res) => {
             uploadStream.end(mindFileBuffer);
         });
 
-        // Cleanup temp file
+        // Step 5: Cleanup temp files
         fs.unlinkSync(tempMindPath);
+        fs.unlinkSync(tempImagePath);
 
         console.log('✅ .mind file generated and uploaded:', uploadResult.secure_url);
 
-        res.json({ mindUrl: uploadResult.secure_url });
+        res.json({ success: true, mindUrl: uploadResult.secure_url });
     } catch (error) {
         console.error('❌ Mind generation error:', error);
-        res.status(500).json({ error: 'Failed to generate .mind file', details: error.message });
+        res.status(500).json({
+            error: 'Failed to generate .mind file',
+            details: error.message,
+            manualUploadRequired: true // Signal frontend to show manual upload option
+        });
+    }
+});
+
+// Manual .mind file upload (fallback when auto-generation fails)
+app.post('/api/admin/upload-mind', adminAuth, upload.single('file'), (req, res) => {
+    try {
+        if (!req.file) return res.status(400).json({ error: 'Fayl yuklanmadi' });
+
+        // Verify it's a .mind file
+        if (!req.file.originalname.endsWith('.mind')) {
+            return res.status(400).json({ error: 'Faqat .mind fayllar qabul qilinadi' });
+        }
+
+        console.log('📤 Manual .mind file uploaded:', req.file.path);
+        res.json({ success: true, mindUrl: req.file.path });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
     }
 });
 
@@ -200,8 +288,40 @@ app.post('/api/admin/settings', adminAuth, async (req, res) => {
 });
 
 // --- HEALTH CHECK ---
-app.get('/api/health', (req, res) => {
-    res.status(200).json({ status: 'healthy', timestamp: new Date().toISOString() });
+app.get('/api/health', async (req, res) => {
+    const health = {
+        status: 'healthy',
+        timestamp: new Date().toISOString(),
+        mongodb: 'unknown',
+        cloudinary: 'unknown'
+    };
+
+    try {
+        // Check MongoDB connection
+        if (mongoose.connection.readyState === 1) {
+            health.mongodb = 'connected';
+        } else {
+            health.mongodb = 'disconnected';
+            health.status = 'degraded';
+        }
+
+        // Check Cloudinary configuration
+        if (process.env.CLOUDINARY_CLOUD_NAME && process.env.CLOUDINARY_API_KEY) {
+            health.cloudinary = 'configured';
+        } else {
+            health.cloudinary = 'not configured';
+            health.status = 'degraded';
+        }
+
+        const statusCode = health.status === 'healthy' ? 200 : 503;
+        res.status(statusCode).json(health);
+    } catch (err) {
+        res.status(500).json({
+            status: 'unhealthy',
+            error: err.message,
+            timestamp: new Date().toISOString()
+        });
+    }
 });
 
 // --- STATIC SERVING & SPA FALLBACK ---

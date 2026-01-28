@@ -4,45 +4,41 @@ const path = require('path');
 
 /**
  * Generate .mind file from marker image using Mind-AR web compiler
- * @param {string} imageUrl - URL of the marker image
+ * @param {string} imagePath - Local path to the marker image (already compressed)
  * @param {string} outputPath - Path to save the generated .mind file
  * @returns {Promise<string>} - Path to the generated .mind file
  */
-async function generateMindFile(imageUrl, outputPath) {
+async function generateMindFile(imagePath, outputPath) {
     let browser;
-    let tempImagePath;
 
     try {
         console.log('🚀 Starting Mind-AR compiler...');
-        console.log('📍 Image URL:', imageUrl);
+        console.log('📍 Image path:', imagePath);
 
-        // Download and optimize image
-        console.log('📥 Downloading image...');
-        const response = await fetch(imageUrl);
-        if (!response.ok) {
-            throw new Error(`Failed to download image: ${response.statusText}`);
+        if (!fs.existsSync(imagePath)) {
+            throw new Error(`Image file not found: ${imagePath}`);
         }
 
-        const buffer = await response.arrayBuffer();
-        tempImagePath = path.join(__dirname, `temp_marker_${Date.now()}.jpg`);
-        fs.writeFileSync(tempImagePath, Buffer.from(buffer));
+        console.log('✅ Image file verified');
 
-        console.log('✅ Image downloaded:', tempImagePath);
-
-        // Launch Puppeteer with Render.com compatible settings
+        // Launch Puppeteer with enhanced stability settings
         console.log('🌐 Launching browser...');
         browser = await puppeteer.launch({
             headless: true,
             args: [
                 '--no-sandbox',
                 '--disable-setuid-sandbox',
-                '--disable-dev-shm-usage',
+                '--disable-dev-shm-usage', // Critical for Render.com
                 '--disable-accelerated-2d-canvas',
                 '--no-first-run',
                 '--no-zygote',
-                '--disable-gpu'
+                '--disable-gpu',
+                '--memory-pressure-handler', // Better RAM management
+                '--disable-software-rasterizer',
+                '--disable-background-timer-throttling'
             ],
-            executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined
+            executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
+            timeout: 120000 // Increased timeout to 2 minutes
         });
 
         const page = await browser.newPage();
@@ -65,7 +61,7 @@ async function generateMindFile(imageUrl, outputPath) {
 
         // Upload image
         const fileInput = await page.$(fileInputSelector);
-        await fileInput.uploadFile(tempImagePath);
+        await fileInput.uploadFile(imagePath);
 
         console.log('📤 Image uploaded to compiler');
 
@@ -156,15 +152,7 @@ async function generateMindFile(imageUrl, outputPath) {
                 console.error('Error closing browser:', e.message);
             }
         }
-
-        if (tempImagePath && fs.existsSync(tempImagePath)) {
-            try {
-                fs.unlinkSync(tempImagePath);
-                console.log('🗑️ Temp image cleaned up');
-            } catch (e) {
-                console.error('Error cleaning up temp image:', e.message);
-            }
-        }
+        // Note: Temp image cleanup now handled in server.js
     }
 }
 
