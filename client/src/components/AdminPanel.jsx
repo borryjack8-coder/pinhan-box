@@ -11,7 +11,8 @@ const AdminPanel = () => {
     const [password, setPassword] = useState('');
     const [isLoggedIn, setIsLoggedIn] = useState(false);
     const [isUploading, setIsUploading] = useState(false);
-    const [newGift, setNewGift] = useState({ clientName: '', videoUrl: '', targetFile: '', pinCode: '' });
+    const [isLoading, setIsLoading] = useState(false);
+    const [newGift, setNewGift] = useState({ clientName: '', videoUrl: '', targetFile: '', thumbnailUrl: '', pinCode: '' });
     const [selectedGift, setSelectedGift] = useState(null);
 
     const checkAuth = async (pass) => {
@@ -28,13 +29,18 @@ const AdminPanel = () => {
     };
 
     const fetchData = async (pass) => {
-        const auth = pass || password;
-        const [giftsRes, statsRes] = await Promise.all([
-            fetch('/api/admin/gifts', { headers: { 'Authorization': `Bearer ${auth}` } }),
-            fetch('/api/admin/analytics', { headers: { 'Authorization': `Bearer ${auth}` } })
-        ]);
-        if (giftsRes.ok) setGifts(await giftsRes.json());
-        if (statsRes.ok) setStats(await statsRes.json());
+        setIsLoading(true);
+        try {
+            const auth = pass || password;
+            const [giftsRes, statsRes] = await Promise.all([
+                fetch('/api/admin/gifts', { headers: { 'Authorization': `Bearer ${auth}` } }),
+                fetch('/api/admin/analytics', { headers: { 'Authorization': `Bearer ${auth}` } })
+            ]);
+            if (giftsRes.ok) setGifts(await giftsRes.json());
+            if (statsRes.ok) setStats(await statsRes.json());
+        } finally {
+            setIsLoading(false);
+        }
     };
 
     useEffect(() => {
@@ -74,7 +80,7 @@ const AdminPanel = () => {
             body: JSON.stringify(newGift)
         });
         if (res.ok) {
-            setNewGift({ clientName: '', videoUrl: '', targetFile: '', pinCode: '' });
+            setNewGift({ clientName: '', videoUrl: '', targetFile: '', thumbnailUrl: '', pinCode: '' });
             fetchData();
             setTab('list');
         }
@@ -124,7 +130,7 @@ const AdminPanel = () => {
 
             <main className="admin-content">
                 {tab === 'dashboard' && <Dashboard stats={stats} />}
-                {tab === 'list' && <GiftsList gifts={gifts} onSelect={setSelectedGift} onReset={() => { }} onDelete={handleDelete} />}
+                {tab === 'list' && <GiftsList gifts={gifts} isLoading={isLoading} onSelect={setSelectedGift} onReset={() => { }} onDelete={handleDelete} />}
                 {tab === 'create' && (
                     <div style={{ padding: '0 40px' }}>
                         <div className="glass" style={{ padding: '40px', maxWidth: '800px' }}>
@@ -139,8 +145,13 @@ const AdminPanel = () => {
                                 {newGift.videoUrl && <p style={{ color: 'var(--success)', fontSize: '12px' }}>✅ Video tayyor</p>}
                             </div>
                             <div className="form-group">
+                                <label>Marker Rasmi (.jpg/.png)</label>
+                                <input type="file" accept="image/*" onChange={e => handleFileUpload(e, 'thumbnailUrl')} />
+                                {newGift.thumbnailUrl && <p style={{ color: 'var(--success)', fontSize: '12px' }}>✅ Rasm tayyor</p>}
+                            </div>
+                            <div className="form-group">
                                 <label>Mind Fayl (.mind)</label>
-                                <input type="file" onChange={e => handleFileUpload(e, 'targetFile')} />
+                                <input type="file" accept=".mind" onChange={e => handleFileUpload(e, 'targetFile')} />
                                 {newGift.targetFile && <p style={{ color: 'var(--success)', fontSize: '12px' }}>✅ Mind fayl tayyor</p>}
                             </div>
                             <button onClick={handleCreate} disabled={isUploading} className="btn-primary">

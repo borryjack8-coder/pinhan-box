@@ -1,3 +1,4 @@
+import React, { useState, useEffect } from 'react';
 import ARExperience from './components/ARExperience';
 import AdminPanel from './components/AdminPanel';
 import QRScanner from './components/QRScanner';

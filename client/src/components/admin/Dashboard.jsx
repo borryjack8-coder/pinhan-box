@@ -1,7 +1,19 @@
 import React from 'react';
 
 const Dashboard = ({ stats }) => {
-    if (!stats) return <div className="skeleton-dashboard">Yuklanmoqda...</div>;
+    if (!stats) return (
+        <div className="stats-grid">
+            {[1, 2, 3].map(i => (
+                <div key={i} className="stat-card skeleton">
+                    <div className="skeleton-circle" style={{ opacity: 0.2 }}></div>
+                    <div className="stat-info">
+                        <div className="skeleton-text" style={{ width: '80px', opacity: 0.2 }}></div>
+                        <div className="skeleton-text" style={{ width: '40px', opacity: 0.4 }}></div>
+                    </div>
+                </div>
+            ))}
+        </div>
+    );
 
     const { totalGifts, totalScans, latestGifts } = stats;
 
