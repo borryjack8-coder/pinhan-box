@@ -49,7 +49,6 @@ const AdminPanel = () => {
             const res = await fetch('/api/admin/gifts', { headers: { 'Authorization': `Bearer ${storedToken}` } });
             if (res.ok) {
                 setGifts(await res.json());
-                // Analytics fetch
                 fetch('/api/admin/analytics', { headers: { 'Authorization': `Bearer ${storedToken}` } })
                     .then(r => r.json()).then(setStats).catch(() => { });
             } else if (res.status === 401) {
@@ -115,16 +114,14 @@ const AdminPanel = () => {
     const handleCreate = async () => {
         console.log("🛠️ Starting Gift Creation Process...");
 
-        // 1. Validation
+        // Validation
         if (!newGift.clientName) return alert("Iltimos, Mijoz ismini kiriting");
         if (!newGift.videoUrl) return alert("Video faylni yuklang");
         if (!newGift.thumbnailUrl) return alert("Marker rasmini yuklang");
 
         if (newGift.targetFile) {
-            // Manual Mind File present
             await submitGift(newGift);
         } else {
-            // Auto-Generate
             await generateAndSubmit();
         }
     };
@@ -135,13 +132,16 @@ const AdminPanel = () => {
             const token = localStorage.getItem('admin_token');
             console.log("⚙️ Requesting Mind Generation for:", newGift.thumbnailUrl);
 
+            // Access property safely
+            const payload = { imageUrl: newGift.thumbnailUrl };
+
             const res = await fetch('/api/admin/generate-mind', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${token}`
                 },
-                body: JSON.stringify({ imageUrl: newGift.thumbnailUrl })
+                body: JSON.stringify(payload)
             });
 
             const data = await res.json();
@@ -163,7 +163,6 @@ const AdminPanel = () => {
 
     const submitGift = async (giftPayload) => {
         const token = localStorage.getItem('admin_token');
-        // Ensure PIN
         if (!giftPayload.pinCode) giftPayload.pinCode = Math.floor(1000 + Math.random() * 9000).toString();
 
         console.log("🎁 Submitting Gift Payload:", giftPayload);
@@ -182,16 +181,26 @@ const AdminPanel = () => {
 
             if (!res.ok) {
                 alert(`XATOLIK (${res.status}): ${data.message || data.error}`);
+                console.error("Create Gift Failed:", data);
                 return;
             }
 
-            alert(`✅ SOVG'A YARATILDI!\nPIN: ${data.pinCode}`);
+            // SUCCESS HANDLING - FIX: USE CORRECT VARIABLES
+            console.log("✅ Gift Created Success:", data);
+
+            // Allow for data.gift wrapper OR direct data object
+            const giftObj = data.gift || data;
+            const name = giftObj.clientName || "Unknown Client";
+
+            alert(`✅ Gift Created Successfully!\nClient: ${name}\nPIN: ${giftObj.pinCode}`);
+
             setNewGift({ clientName: '', videoUrl: '', targetFile: '', thumbnailUrl: '', pinCode: '' });
             fetchData();
             setTab('list');
 
         } catch (err) {
             alert("Tarmoq xatosi: " + err.message);
+            console.error("Network Error:", err);
         }
     };
 
@@ -201,7 +210,6 @@ const AdminPanel = () => {
         await fetch(`/api/admin/gifts/${id}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` } });
         fetchData();
     };
-
 
     if (!isLoggedIn) {
         return (
