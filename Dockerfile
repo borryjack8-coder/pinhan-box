@@ -1,29 +1,32 @@
 # Stage 1: Build frontend
 FROM node:20-alpine AS frontend-builder
-
 WORKDIR /app/client
-
-# Copy client package files
 COPY client/package*.json ./
-
-# Install dependencies
 RUN npm ci --include=dev
-
-# Copy client source
 COPY client/ ./
-
-# Build frontend
 RUN npm run build
 
-# Stage 2: Production image with Puppeteer support
+# Stage 2: Production image
 FROM node:20-bullseye-slim
 
-# Install Chrome dependencies for Puppeteer
+# Set Puppeteer environment variables early
+ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
+    PUPPETEER_EXECUTABLE_PATH=/usr/bin/google-chrome-stable \
+    NODE_ENV=production
+
+# Install Chrome and Canvas system dependencies
 RUN apt-get update && apt-get install -y \
     wget \
     gnupg \
     ca-certificates \
     fonts-liberation \
+    # Canvas dependencies
+    libcairo2-dev \
+    libpango1.0-dev \
+    libjpeg-dev \
+    libgif-dev \
+    librsvg2-dev \
+    # Other Puppeteer/Chrome deps
     libasound2 \
     libatk-bridge2.0-0 \
     libatk1.0-0 \
@@ -57,22 +60,21 @@ RUN apt-get update && apt-get install -y \
     libxtst6 \
     lsb-release \
     xdg-utils \
-    && rm -rf /var/lib/apt/lists/*
-
-# Install Google Chrome Stable
-RUN wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | apt-key add - \
+    --no-install-recommends \
+    && wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | apt-key add - \
     && sh -c 'echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" >> /etc/apt/sources.list.d/google.list' \
     && apt-get update \
-    && apt-get install -y google-chrome-stable \
+    && apt-get install -y google-chrome-stable --no-install-recommends \
+    && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-# Set working directory
 WORKDIR /app
 
-# Copy package files
+# Copy backend package files
 COPY package*.json ./
 
 # Install production dependencies
+# Pre-installing canvas deps above ensures npm doesn't fail on compilation
 RUN npm ci --only=production
 
 # Copy backend source
@@ -81,22 +83,16 @@ COPY models/ ./models/
 COPY services/ ./services/
 COPY public/ ./public/
 
-# Copy built frontend from builder stage
+# Copy built frontend from Stage 1
 COPY --from=frontend-builder /app/client/dist ./client/dist
 
 # Create directory for temporary files
 RUN mkdir -p /app/temp && chmod 777 /app/temp
 
-# Set Puppeteer environment variables
-ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
-    PUPPETEER_EXECUTABLE_PATH=/usr/bin/google-chrome-stable
-
-# Expose port
 EXPOSE 3000
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
     CMD node -e "require('http').get('http://localhost:3000/api/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"
 
-# Start the application
 CMD ["node", "server.js"]
