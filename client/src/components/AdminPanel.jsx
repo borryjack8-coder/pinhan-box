@@ -18,55 +18,92 @@ const AdminPanel = () => {
     const [generationError, setGenerationError] = useState(null);
 
     const checkAuth = async (pass) => {
-        const res = await fetch('/api/admin/gifts', {
-            headers: { 'Authorization': `Bearer ${pass}` }
-        });
-        if (res.ok) {
-            setIsLoggedIn(true);
-            localStorage.setItem('admin_pass', pass);
-            fetchData(pass);
-        } else if (pass) {
-            alert('Parol noto\'g\'ri!');
-        }
-    };
-
-    const fetchData = async (pass) => {
         setIsLoading(true);
         try {
-            const auth = pass || password;
-            const [giftsRes, statsRes] = await Promise.all([
-                fetch('/api/admin/gifts', { headers: { 'Authorization': `Bearer ${auth}` } }),
-                fetch('/api/admin/analytics', { headers: { 'Authorization': `Bearer ${auth}` } })
-            ]);
-            if (giftsRes.ok) setGifts(await giftsRes.json());
-            if (statsRes.ok) setStats(await statsRes.json());
+            const res = await fetch('/api/admin/login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ password: pass })
+            });
+            const data = await res.json();
+            if (res.ok && data.token) {
+                setIsLoggedIn(true);
+                localStorage.setItem('admin_token', data.token);
+                fetchData(data.token);
+            } else {
+                alert(data.error || 'Parol noto\'g\'ri!');
+            }
+        } catch (err) {
+            alert('Tarmoq xatosi!');
         } finally {
             setIsLoading(false);
         }
     };
 
+    const fetchData = async (explicitToken) => {
+        setIsLoading(true);
+        const token = explicitToken || localStorage.getItem('admin_token');
+        if (!token) return;
+
+        try {
+            const [giftsRes, statsRes] = await Promise.all([
+                fetch('/api/admin/gifts', { headers: { 'Authorization': `Bearer ${token}` } }),
+                fetch('/api/admin/analytics', { headers: { 'Authorization': `Bearer ${token}` } })
+            ]);
+
+            if (giftsRes.status === 401) {
+                handleLogout();
+                return;
+            }
+
+            if (giftsRes.ok) setGifts(await giftsRes.json());
+            if (statsRes.ok) setStats(await statsRes.json());
+        } catch (err) {
+            console.error("Fetch data error:", err);
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    const handleLogout = () => {
+        localStorage.removeItem('admin_token');
+        setIsLoggedIn(false);
+        setPassword('');
+    };
+
     useEffect(() => {
-        const savedPass = localStorage.getItem('admin_pass');
-        if (savedPass) {
-            setPassword(savedPass);
-            checkAuth(savedPass);
+        const token = localStorage.getItem('admin_token');
+        if (token) {
+            setIsLoggedIn(true);
+            fetchData(token);
         }
     }, []);
 
     const handleFileUpload = async (e, type) => {
         const file = e.target.files[0];
         if (!file) return;
+
+        const token = localStorage.getItem('admin_token');
+        if (!token) return;
+
         setIsUploading(true);
         const formData = new FormData();
         formData.append('file', file);
+
+        const endpoint = type === 'targetFile' ? '/api/admin/upload-mind' : '/api/admin/upload';
+
         try {
-            const res = await fetch('/api/admin/upload', {
+            const res = await fetch(endpoint, {
                 method: 'POST',
-                headers: { 'Authorization': `Bearer ${password}` },
+                headers: { 'Authorization': `Bearer ${token}` },
                 body: formData
             });
             const data = await res.json();
-            if (data.url) setNewGift(prev => ({ ...prev, [type]: data.url }));
+            if (data.mindUrl) setNewGift(prev => ({ ...prev, targetFile: data.mindUrl }));
+            else if (data.url) setNewGift(prev => ({ ...prev, [type]: data.url }));
+            else if (data.error) alert(data.error);
+        } catch (err) {
+            alert("Yuklashda xatolik yuz berdi");
         } finally {
             setIsUploading(false);
         }
@@ -89,12 +126,12 @@ const AdminPanel = () => {
         setGenerationError(null);
 
         try {
-            // Auto-generate .mind file from thumbnail
+            const token = localStorage.getItem('admin_token');
             const mindRes = await fetch('/api/admin/generate-mind', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${password}`
+                    'Authorization': `Bearer ${token}`
                 },
                 body: JSON.stringify({ imageUrl: newGift.thumbnailUrl })
             });
@@ -121,13 +158,14 @@ const AdminPanel = () => {
 
     const createGift = async (mindUrl) => {
         try {
+            const token = localStorage.getItem('admin_token');
             const giftData = mindUrl ? { ...newGift, targetFile: mindUrl } : newGift;
 
             const res = await fetch('/api/admin/gifts', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${password}`
+                    'Authorization': `Bearer ${token}`
                 },
                 body: JSON.stringify(giftData)
             });
@@ -146,9 +184,10 @@ const AdminPanel = () => {
 
     const handleDelete = async (id) => {
         if (!confirm('O\'chirilsinmi?')) return;
+        const token = localStorage.getItem('admin_token');
         await fetch(`/api/admin/gifts/${id}`, {
             method: 'DELETE',
-            headers: { 'Authorization': `Bearer ${password}` }
+            headers: { 'Authorization': `Bearer ${token}` }
         });
         fetchData();
     };
@@ -176,7 +215,7 @@ const AdminPanel = () => {
         <div className="admin-page">
             <header className="admin-header">
                 <h1 style={{ color: 'var(--primary)' }}>PINHAN BOX</h1>
-                <button onClick={() => { localStorage.removeItem('admin_pass'); setIsLoggedIn(false); }} className="nav-btn">Chiqish</button>
+                <button onClick={handleLogout} className="nav-btn">Chiqish</button>
             </header>
 
             <nav className="admin-nav">

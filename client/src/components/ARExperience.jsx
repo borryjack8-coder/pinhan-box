@@ -66,7 +66,17 @@ const ARExperience = ({ videoUrl, targetFile }) => {
         // 4. Animation Loop
         setRecording(true);
         const stream = destCanvas.captureStream(30);
-        mediaRecorderRef.current = new MediaRecorder(stream, { mimeType: 'video/webm' });
+
+        // Detect supported MIME types for better compatibility (especially iOS)
+        const mimeType = MediaRecorder.isTypeSupported('video/mp4')
+            ? 'video/mp4'
+            : MediaRecorder.isTypeSupported('video/quicktime')
+                ? 'video/quicktime'
+                : 'video/webm;codecs=vp9';
+
+        console.log("Recording with MIME type:", mimeType);
+
+        mediaRecorderRef.current = new MediaRecorder(stream, { mimeType });
         chunksRef.current = [];
 
         mediaRecorderRef.current.ondataavailable = (e) => {
@@ -74,12 +84,23 @@ const ARExperience = ({ videoUrl, targetFile }) => {
         };
 
         mediaRecorderRef.current.onstop = () => {
-            const blob = new Blob(chunksRef.current, { type: 'video/webm' });
+            const blob = new Blob(chunksRef.current, { type: mimeType });
+            const extension = mimeType.includes('mp4') ? 'mp4' : (mimeType.includes('quicktime') ? 'mov' : 'webm');
             const url = URL.createObjectURL(blob);
+
+            // For iOS we sometimes need to open in new tab or use a specific download flow
             const a = document.createElement('a');
             a.href = url;
-            a.download = `Pinhan-Memory-${Date.now()}.webm`;
+            a.download = `Pinhan-Box-${Date.now()}.${extension}`;
+
+            // Necessary for iOS Safari to trigger download
+            document.body.appendChild(a);
             a.click();
+            document.body.removeChild(a);
+
+            // Cleanup memory
+            setTimeout(() => URL.revokeObjectURL(url), 100);
+
             setRecording(false);
         };
 

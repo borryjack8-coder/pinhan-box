@@ -14,6 +14,16 @@ function App() {
     const [showScanner, setShowScanner] = useState(false);
     const [settings, setSettings] = useState({ telegram: '', instagram: '', phone: '' });
 
+    // Cloudinary URL Optimizer
+    const optimizeUrl = (url) => {
+        if (!url || !url.includes('cloudinary.com')) return url;
+        // In Cloudinary, we can inject parameters after /upload/
+        if (url.includes('/upload/')) {
+            return url.replace('/upload/', '/upload/f_auto,q_auto/');
+        }
+        return url;
+    };
+
     // Simple Path Routing
     const isInternalAdmin = window.location.pathname === '/admin';
 
@@ -154,7 +164,7 @@ function App() {
                         style={{ width: '100%', height: '100%' }}
                     >
                         <ARExperience
-                            videoUrl={giftData.videoUrl}
+                            videoUrl={optimizeUrl(giftData.videoUrl)}
                             targetFile={giftData.targetFile}
                         />
                     </motion.div>
