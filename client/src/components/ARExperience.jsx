@@ -2,27 +2,26 @@ import React, { useEffect, useRef, useState } from 'react';
 import 'mind-ar/dist/mindar-image-aframe.prod.js';
 
 const ARExperience = ({ videoUrl: propVideoUrl, targetFile: propTargetFile }) => {
+    // --- STATE ---
     const sceneRef = useRef(null);
     const videoRef = useRef(null);
     const [status, setStatus] = useState("Initializing...");
     const [error, setError] = useState(null);
 
-    // Playback State
-    const [isVideoStarted, setIsVideoStarted] = useState(false);
+    // Strict Gatekeeper State: User MUST click to unlock
+    const [hasInteracted, setHasInteracted] = useState(false);
 
-    // Dimension State
-    const [videoHeight, setVideoHeight] = useState(1); // Default to square, will update on load
-
-    // Local State for fetched data
-    const [videoUrl, setVideoUrl] = useState(propVideoUrl);
-    const [targetFile, setTargetFile] = useState(propTargetFile);
+    // Data Loading State
     const [isLoadingData, setIsLoadingData] = useState(!propTargetFile);
+    const [fetchedVideoUrl, setFetchedVideoUrl] = useState(propVideoUrl);
+    const [fetchedTargetFile, setFetchedTargetFile] = useState(propTargetFile);
+    const [videoHeight, setVideoHeight] = useState(1); // Aspect ratio fix
 
-    // --- FETCH DATA IF MISSING ---
+    // --- 1. DATA FETCHING ---
     useEffect(() => {
         if (propTargetFile && propVideoUrl) {
-            setVideoUrl(propVideoUrl);
-            setTargetFile(propTargetFile);
+            setFetchedVideoUrl(propVideoUrl);
+            setFetchedTargetFile(propTargetFile);
             setIsLoadingData(false);
             return;
         }
@@ -31,20 +30,18 @@ const ARExperience = ({ videoUrl: propVideoUrl, targetFile: propTargetFile }) =>
         const id = urlParams.get('id');
 
         if (!id) {
-            setError("Sovg'a ID topilmadi. Link noto'g'ri.");
+            setError("ID topilmadi. Havola noto'g'ri.");
             setIsLoadingData(false);
             return;
         }
 
         const fetchGift = async () => {
-            console.log("🌍 Fetching Gift Data for ID:", id);
-            setStatus("Ma'lumot yuklanmoqda...");
+            console.log("🌍 Fetching Gift Data:", id);
+            setStatus("Yuklanmoqda...");
             try {
                 const res = await fetch(`/api/gifts/${id}`);
                 const data = await res.json();
                 if (!res.ok) throw new Error(data.error || "Gift not found");
-
-                console.log("✅ Gift Data Loaded:", data);
 
                 const optimize = (url) => {
                     if (!url || !url.includes('cloudinary.com')) return url;
@@ -52,225 +49,214 @@ const ARExperience = ({ videoUrl: propVideoUrl, targetFile: propTargetFile }) =>
                     return url;
                 };
 
-                setVideoUrl(optimize(data.videoUrl));
-                setTargetFile(data.targetFile);
+                setFetchedVideoUrl(optimize(data.videoUrl));
+                setFetchedTargetFile(data.targetFile);
             } catch (err) {
                 console.error("Fetch Error:", err);
-                setError("Xatolik: " + err.message);
+                setError(err.message);
             } finally {
                 setIsLoadingData(false);
             }
         };
 
         fetchGift();
-
     }, [propTargetFile, propVideoUrl]);
 
-    // --- AR EVENTS ---
+    // --- 2. GATEKEEPER INTERACTION ---
+    const handleUserInteraction = () => {
+        const video = document.getElementById('gift-video'); // Direct DOM access for reliability
+        if (video) {
+            console.log("🔓 Unlocking video playback...");
+            video.muted = false;
+
+            // The Chain of Trust: Play -> Pause immediately unlocks the audio context
+            video.play()
+                .then(() => {
+                    video.pause();
+                    video.currentTime = 0;
+                    console.log("✅ Video unlocked successfully.");
+                    setHasInteracted(true); // Reveal Scene
+                })
+                .catch(e => {
+                    console.error("❌ Unlock failed:", e);
+                    alert("Videoni ochib bo'lmadi: " + e.message);
+                });
+        } else {
+            // Fallback if video ref is missing (rare)
+            setHasInteracted(true);
+        }
+    };
+
+    // --- 3. A-FRAME EVENT LISTENERS ---
     useEffect(() => {
-        if (isLoadingData || !targetFile) return;
+        if (!hasInteracted || !fetchedTargetFile) return;
 
-        console.log("🚀 AR Mount. Target:", targetFile);
-
+        console.log("🚀 Mounting AR Scene...");
         const sceneEl = sceneRef.current;
-        if (!sceneEl) return;
+        const videoEl = document.getElementById('gift-video');
+
+        if (!sceneEl || !videoEl) return;
 
         const onArReady = () => {
-            console.log("✅ AR READY");
-            setStatus("Kamera Tayyor");
-        };
-        const onArError = (e) => {
-            console.error("❌ AR ERROR:", e);
-            setError("AR Error: " + (e.detail?.error || "Unknown"));
-        };
-        const onTargetFound = () => {
-            console.log("🎯 TARGET FOUND");
-            setStatus("Target Topildi!");
-            // Only play if we have already started (user interaction occurred)
-            if (videoRef.current && isVideoStarted) {
-                videoRef.current.play().catch(e => console.warn("Autoplay blocked (retry):", e));
-            }
-        };
-        const onTargetLost = () => {
-            console.log("💨 TARGET LOST");
-            setStatus("Qidirilmoqda...");
-            if (videoRef.current) videoRef.current.pause();
+            console.log("✅ AR System Ready");
+            setStatus("Kamera Tayyor - Marker qidiring");
         };
 
+        const onTargetFound = () => {
+            console.log("🎯 TARGET FOUND - PLAYING VIDEO");
+            setStatus("Playing...");
+            videoEl.play().catch(e => console.error("Play Error:", e));
+        };
+
+        const onTargetLost = () => {
+            console.log("💨 TARGET LOST - PAUSING");
+            setStatus("Qidirilmoqda...");
+            videoEl.pause();
+        };
+
+        const onArError = (e) => {
+            console.error("AR Error:", e);
+            setError("Kamera xatosi: " + (e.detail?.error || "Unknown"));
+        };
+
+        // Attach
         sceneEl.addEventListener("arReady", onArReady);
         sceneEl.addEventListener("arError", onArError);
         sceneEl.addEventListener("mindar-image-target-found", onTargetFound);
         sceneEl.addEventListener("mindar-image-target-lost", onTargetLost);
 
         return () => {
-            if (sceneEl) {
-                sceneEl.removeEventListener("arReady", onArReady);
-                sceneEl.removeEventListener("arError", onArError);
-                sceneEl.removeEventListener("mindar-image-target-found", onTargetFound);
-                sceneEl.removeEventListener("mindar-image-target-lost", onTargetLost);
-            }
+            sceneEl.removeEventListener("arReady", onArReady);
+            sceneEl.removeEventListener("arError", onArError);
+            sceneEl.removeEventListener("mindar-image-target-found", onTargetFound);
+            sceneEl.removeEventListener("mindar-image-target-lost", onTargetLost);
         };
-    }, [targetFile, isLoadingData, isVideoStarted]); // Added isVideoStarted dependency
+    }, [hasInteracted, fetchedTargetFile]);
 
-    // --- RATIO CALCULATION ---
-    const handleVideoLoad = (e) => {
+    // --- 4. ASPECT RATIO HANDLER ---
+    const handleMetadata = (e) => {
         const v = e.target;
         if (v.videoWidth && v.videoHeight) {
             const ratio = v.videoHeight / v.videoWidth;
-            console.log(`📏 Video Loaded. Size: ${v.videoWidth}x${v.videoHeight}. Ratio: ${ratio}`);
+            console.log(`📏 Video Aspect Ratio: ${ratio}`);
             setVideoHeight(ratio);
         }
     };
 
-    // --- START INTERACTION ---
-    const handleStartClick = () => {
-        const video = videoRef.current;
-        if (video) {
-            // Unlock audio/video with user gesture
-            video.muted = false; // Unmute
-            video.play()
-                .then(() => {
-                    console.log("▶️ Video started (unlocked). Pausing until target found.");
-                    // We don't pause here if we want to mimic "Tap to View", 
-                    // but usually we wait for target.
-                    // However, for immediate feedback that it works, we can just leave it playing 
-                    // or pause and let targetFound resume it. 
-                    // MindAR usually resumes on target found.
-                    // Let's Pause it so it doesn't play background audio without visual.
-                    video.pause();
-                    video.currentTime = 0;
-                    setIsVideoStarted(true);
-                })
-                .catch(err => {
-                    console.error("❌ Playback failed:", err);
-                    setError("Video xatosi: " + err.message);
-                });
-        }
-    };
+    // --- RENDERS ---
 
-    if (isLoadingData) {
+    // 1. Loading
+    if (isLoadingData) return (
+        <div style={styles.fullscreenCenter}>
+            <div className="loader" style={styles.spinner}></div>
+            <p style={{ marginTop: '20px', color: 'gold' }}>Yuklanmoqda...</p>
+        </div>
+    );
+
+    // 2. Error
+    if (error) return (
+        <div style={styles.fullscreenCenter}>
+            <h2 style={{ color: 'red' }}>⚠️ XATOLIK</h2>
+            <p>{error}</p>
+            <button onClick={() => window.location.reload()} style={styles.btn}>Qayta Yuklash</button>
+        </div>
+    );
+
+    // 3. Gatekeeper (THE FIX)
+    if (!hasInteracted) {
         return (
-            <div className="center-overlay">
-                <div className="loader" style={styles.spinner}></div>
-                <p style={{ marginTop: '20px' }}>Yuklanmoqda...</p>
+            <div style={{ ...styles.fullscreenCenter, zIndex: 9999, background: 'black' }}>
+                <img src="/logo.png" alt="logo" style={{ width: '80px', marginBottom: '30px' }} />
+                <h1 style={{ color: 'white', marginBottom: '10px' }}>Tayyormisiz?</h1>
+                <p style={{ color: '#aaa', marginBottom: '40px' }}>AR Camera rejimini yoqish</p>
+
+                <button onClick={handleUserInteraction} style={styles.bigBtn}>
+                    VIDEONI KO'RISH 🎬
+                </button>
             </div>
         );
     }
 
-    if (error) {
-        return (
-            <div className="center-overlay" style={{ color: 'red' }}>
-                <h3>⚠️ XATOLIK</h3>
-                <p>{error}</p>
-                <button onClick={() => window.location.reload()} className="retry-btn">Qayta Yuklash</button>
-            </div>
-        );
-    }
-
+    // 4. AR Scene
     return (
-        <div style={{ width: '100%', height: '100%', position: 'relative', background: 'transparent' }}>
-
+        <div style={{ width: '100%', height: '100%', position: 'relative', overflow: 'hidden' }}>
+            {/* Transparency Styles inside component to be sure */}
             <style dangerouslySetInnerHTML={{
                 __html: `
-                video { position: absolute; top:0; left:0; width:100%; height:100%; object-fit:cover; z-index:-2; }
-                .a-canvas { z-index: -1 !important; }
-                .center-overlay {
-                    position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-                    background: rgba(0,0,0,0.85); color: white;
-                    display: flex; flex-direction: column; align-items: center; justify-content: center;
-                    z-index: 2000;
-                }
-                .retry-btn {
-                    margin-top: 20px; padding: 10px 20px; border-radius: 10px; border: none; cursor: pointer;
-                }
+                video#gift-video { opacity: 0; position:absolute; z-index:-10; } 
+                .mindar-ui-overlay { display: none !important; }
             `}} />
 
-            {/* STATUS OVERLAY */}
+            {/* Status Overlay */}
             <div style={{
-                position: 'absolute', top: 10, left: 10, zIndex: 9999,
-                background: 'rgba(0,0,0,0.6)', padding: '5px 10px', borderRadius: '5px',
-                color: '#0f0', fontFamily: 'monospace', fontSize: '12px',
-                pointerEvents: 'none'
+                position: 'absolute', top: 10, left: 10, zIndex: 1000,
+                background: 'rgba(0,0,0,0.6)', padding: '5px 10px', borderRadius: '6px',
+                color: '#0f0', fontFamily: 'monospace', fontSize: '12px', pointerEvents: 'none'
             }}>
                 STATUS: {status}
             </div>
 
-            {/* TAP TO START OVERLAY */}
-            {!isVideoStarted && !isLoadingData && (
-                <div className="center-overlay">
-                    <img src="/logo.png" style={{ width: '80px', marginBottom: '20px' }} alt="logo" />
-                    <h2 style={{ color: 'gold', marginBottom: '10px' }}>Sovg'ani Ko'rish</h2>
-                    <p style={{ color: '#aaa', marginBottom: '30px' }}>Kamerani rasmga qarating</p>
+            <a-scene
+                ref={sceneRef}
+                mindar-image={`imageTargetSrc: ${fetchedTargetFile}; uiLoading: no; uiScanning: no; uiError: no; filterMinCF:0.0001; filterBeta: 0.001;`}
+                color-space="sRGB"
+                renderer="colorManagement: true, physicallyCorrectLights: true"
+                vr-mode-ui="enabled: false"
+                device-orientation-permission-ui="enabled: false"
+                style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', zIndex: 1 }}
+            >
+                <a-assets>
+                    <video
+                        id="gift-video"
+                        src={fetchedVideoUrl}
+                        preload="auto"
+                        playsInline
+                        webkit-playsinline="true"
+                        loop
+                        crossOrigin="anonymous"
+                        onLoadedMetadata={handleMetadata} // Calc ratio here
+                    ></video>
+                </a-assets>
 
-                    <button
-                        onClick={handleStartClick}
-                        style={{
-                            padding: '18px 50px',
-                            fontSize: '18px',
-                            fontWeight: 'bold',
-                            background: 'gold',
-                            border: 'none',
-                            borderRadius: '30px',
-                            cursor: 'pointer',
-                            boxShadow: '0 0 20px rgba(255, 215, 0, 0.4)'
-                        }}
-                    >
-                        OCHISH
-                    </button>
-                </div>
-            )}
+                <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
 
-            {/* AR SCENE */}
-            {targetFile && (
-                <a-scene
-                    ref={sceneRef}
-                    mindar-image={`imageTargetSrc: ${targetFile}; uiLoading: no; uiScanning: no; uiError: no; filterMinCF:0.0001; filterBeta: 0.001;`}
-                    color-space="sRGB"
-                    renderer="colorManagement: true, physicallyCorrectLights: true"
-                    vr-mode-ui="enabled: false"
-                    device-orientation-permission-ui="enabled: false"
-                    style={{ position: 'absolute', top: 0, left: 0, zIndex: -1 }}
-                >
-                    <a-assets>
-                        {/* Modified Video Tag */}
-                        <video
-                            ref={videoRef}
-                            id="gift-video"
-                            src={videoUrl}
-                            onLoadedMetadata={handleVideoLoad} // CALCULATE RATIO
-                            preload="auto"
-                            loop
-                            playsInline
-                            webkit-playsinline="true"
-                            crossOrigin="anonymous"
-                        ></video>
-                    </a-assets>
-
-                    <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
-
-                    <a-entity mindar-image-target="targetIndex: 0">
-                        {/* Dynamic Height Plane */}
-                        <a-plane
-                            src="#gift-video"
-                            position="0 0 0"
-                            height={videoHeight}
-                            width="1"
-                            rotation="0 0 0"
-                        ></a-plane>
-                    </a-entity>
-                </a-scene>
-            )}
+                <a-entity mindar-image-target="targetIndex: 0">
+                    <a-plane
+                        src="#gift-video"
+                        position="0 0 0"
+                        height={videoHeight}
+                        width="1" // MINDAR normalizes target width to 1
+                        rotation="0 0 0"
+                    ></a-plane>
+                </a-entity>
+            </a-scene>
         </div>
     );
 };
 
 const styles = {
+    fullscreenCenter: {
+        position: 'fixed', top: 0, left: 0, width: '100%', height: '100%',
+        display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+        background: 'black', color: 'white', textAlign: 'center', padding: '20px'
+    },
     spinner: {
         width: '50px', height: '50px',
         border: '4px solid rgba(255,215,0,0.1)',
         borderTop: '4px solid #FFD700',
         borderRadius: '50%',
         animation: 'spin 1s linear infinite'
+    },
+    btn: {
+        marginTop: '20px', padding: '10px 20px', borderRadius: '8px', border: 'none', cursor: 'pointer'
+    },
+    bigBtn: {
+        padding: '20px 40px', fontSize: '22px', fontWeight: 'bold',
+        background: 'linear-gradient(45deg, #FFD700, #FFA500)',
+        border: 'none', borderRadius: '50px',
+        color: 'black', cursor: 'pointer',
+        boxShadow: '0 0 25px rgba(255,215,0,0.4)',
+        transform: 'scale(1)', transition: 'transform 0.2s'
     }
 };
 
