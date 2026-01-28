@@ -199,8 +199,35 @@ app.post('/api/admin/settings', adminAuth, async (req, res) => {
     }
 });
 
-// Serving
-app.use(express.static(path.join(__dirname, 'client/dist')));
-app.get('*', (req, res) => res.sendFile(path.join(__dirname, 'client/dist', 'index.html')));
+// --- STATIC SERVING & SPA FALLBACK ---
+const clientDistPath = path.join(__dirname, 'client/dist');
 
-app.listen(PORT, () => console.log(`🚀 Server: ${PORT}`));
+// Serve static files with proper MIME types
+app.use(express.static(clientDistPath, {
+    setHeaders: (res, filePath) => {
+        if (filePath.endsWith('.js')) {
+            res.setHeader('Content-Type', 'application/javascript');
+        } else if (filePath.endsWith('.css')) {
+            res.setHeader('Content-Type', 'text/css');
+        }
+    }
+}));
+
+// SPA Fallback: serve index.html for all non-API routes
+app.get('*', (req, res) => {
+    // Don't serve index.html for API routes
+    if (req.path.startsWith('/api')) {
+        return res.status(404).json({ error: 'API endpoint not found' });
+    }
+
+    const indexPath = path.join(clientDistPath, 'index.html');
+
+    // Check if index.html exists
+    if (fs.existsSync(indexPath)) {
+        res.sendFile(indexPath);
+    } else {
+        res.status(500).send('Build files not found. Please run: npm run build');
+    }
+});
+
+app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));

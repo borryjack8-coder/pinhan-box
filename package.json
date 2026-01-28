@@ -19,6 +19,7 @@
     "multer": "^1.4.5-lts.1",
     "multer-storage-cloudinary": "^4.0.0",
     "puppeteer": "^24.36.1",
+    "sharp": "^0.34.5",
     "uuid": "^9.0.1"
   }
 }
