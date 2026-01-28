@@ -21,7 +21,6 @@ const AdminPanel = () => {
     const checkAuth = async (pass) => {
         setIsLoading(true);
         try {
-            console.log('🔐 Attempting Login...');
             const res = await fetch('/api/admin/login', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -29,48 +28,39 @@ const AdminPanel = () => {
             });
             const data = await res.json();
             if (res.ok && data.token) {
-                console.log('✅ Login Success');
-                setIsLoggedIn(true);
                 localStorage.setItem('admin_token', data.token);
+                setIsLoggedIn(true);
                 fetchData(data.token);
             } else {
-                console.warn('⚠️ Login Failed:', data.error);
-                alert(data.error || 'Parol noto\'g\'ri!');
+                alert(data.error || 'Login xatosi');
             }
         } catch (err) {
-            console.error('❌ Network Error:', err);
-            alert('Tarmoq xatosi: Server ishlayaptimi?');
+            alert('Serverga ulanib bo\'lmadi');
         } finally {
             setIsLoading(false);
         }
     };
 
-    const fetchData = async (explicitToken) => {
-        const token = explicitToken || localStorage.getItem('admin_token');
-        if (!token) return;
-
+    const fetchData = async (token) => {
         try {
-            const [giftsRes, statsRes] = await Promise.all([
-                fetch('/api/admin/gifts', { headers: { 'Authorization': `Bearer ${token}` } }),
-                fetch('/api/admin/analytics', { headers: { 'Authorization': `Bearer ${token}` } })
-            ]);
+            const storedToken = token || localStorage.getItem('admin_token');
+            if (!storedToken) return;
 
-            if (giftsRes.status === 401) {
+            const res = await fetch('/api/admin/gifts', { headers: { 'Authorization': `Bearer ${storedToken}` } });
+            if (res.ok) {
+                setGifts(await res.json());
+                // Analytics fetch
+                fetch('/api/admin/analytics', { headers: { 'Authorization': `Bearer ${storedToken}` } })
+                    .then(r => r.json()).then(setStats).catch(() => { });
+            } else if (res.status === 401) {
                 handleLogout();
-                return;
             }
-
-            if (giftsRes.ok) setGifts(await giftsRes.json());
-            if (statsRes.ok) setStats(await statsRes.json());
-        } catch (err) {
-            console.error("❌ Stats Fetch Error:", err);
-        }
+        } catch (e) { console.error(e); }
     };
 
     const handleLogout = () => {
         localStorage.removeItem('admin_token');
         setIsLoggedIn(false);
-        setPassword('');
     };
 
     useEffect(() => {
@@ -81,21 +71,19 @@ const AdminPanel = () => {
         }
     }, []);
 
-    // --- FILE UPLOAD ---
+    // --- UPLOAD HANDLER ---
     const handleFileUpload = async (e, type) => {
         const file = e.target.files[0];
         if (!file) return;
 
-        const token = localStorage.getItem('admin_token');
-        if (!token) return;
-
+        console.log(`📤 Uploading file for ${type}:`, file);
         setIsUploading(true);
-        console.log(`📤 Uploading ${type}: ${file.name}`);
 
         const formData = new FormData();
         formData.append('file', file);
 
         const endpoint = type === 'targetFile' ? '/api/admin/upload-mind' : '/api/admin/upload';
+        const token = localStorage.getItem('admin_token');
 
         try {
             const res = await fetch(endpoint, {
@@ -105,16 +93,19 @@ const AdminPanel = () => {
             });
             const data = await res.json();
 
-            if (!res.ok) throw new Error(data.error || 'Upload failed');
+            if (!res.ok) {
+                alert(`Yuklash xatosi: ${data.message || data.error}`);
+                console.error("Upload Failed:", data);
+                return;
+            }
 
-            console.log(`✅ Upload Success (${type}):`, data);
+            console.log("✅ Upload Response:", data);
 
             if (data.mindUrl) setNewGift(prev => ({ ...prev, targetFile: data.mindUrl }));
             else if (data.url) setNewGift(prev => ({ ...prev, [type]: data.url }));
 
         } catch (err) {
-            console.error("❌ Upload Error:", err);
-            alert("Yuklashda xatolik: " + err.message);
+            alert("Network Error during upload: " + err.message);
         } finally {
             setIsUploading(false);
         }
@@ -122,26 +113,29 @@ const AdminPanel = () => {
 
     // --- CREATE GIFT ---
     const handleCreate = async () => {
-        // Validation check
-        if (!newGift.clientName) return alert('Mijoz ismini kiriting!');
-        if (!newGift.videoUrl) return alert('Video yuklanmagan!');
-        if (!newGift.thumbnailUrl) return alert('Marker rasmi yuklanmagan!');
+        console.log("🛠️ Starting Gift Creation Process...");
 
-        // Manual Validation (if manual upload used)
+        // 1. Validation
+        if (!newGift.clientName) return alert("Iltimos, Mijoz ismini kiriting");
+        if (!newGift.videoUrl) return alert("Video faylni yuklang");
+        if (!newGift.thumbnailUrl) return alert("Marker rasmini yuklang");
+
         if (newGift.targetFile) {
-            console.log("⏩ Using manual .mind file");
-            await createGift();
-            return;
+            // Manual Mind File present
+            await submitGift(newGift);
+        } else {
+            // Auto-Generate
+            await generateAndSubmit();
         }
+    };
 
-        // Auto Generation
-        console.log("⚙️ Starting Auto-Generation...");
+    const generateAndSubmit = async () => {
         setIsGenerating(true);
-        setGenerationError(null);
-
         try {
             const token = localStorage.getItem('admin_token');
-            const mindRes = await fetch('/api/admin/generate-mind', {
+            console.log("⚙️ Requesting Mind Generation for:", newGift.thumbnailUrl);
+
+            const res = await fetch('/api/admin/generate-mind', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -150,43 +144,29 @@ const AdminPanel = () => {
                 body: JSON.stringify({ imageUrl: newGift.thumbnailUrl })
             });
 
-            if (!mindRes.ok) {
-                const errorData = await mindRes.json();
-                console.error("❌ Mind Generation Failed:", errorData);
-                throw new Error(errorData.details || 'Mind file generation failed');
-            }
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.message || 'Generation Failed');
 
-            const { mindUrl } = await mindRes.json();
-            console.log("✅ Mind File Generated:", mindUrl);
+            console.log("✅ Mind Generated:", data.mindUrl);
 
-            // Should update state AND proceed immediately
-            const updatedGift = { ...newGift, targetFile: mindUrl };
-            setNewGift(updatedGift); // Update UI
+            const readyGift = { ...newGift, targetFile: data.mindUrl };
+            setNewGift(readyGift);
+            await submitGift(readyGift);
 
-            await createGift(mindUrl); // Pass directly to avoid race condition
-
-        } catch (error) {
-            console.error('❌ Auto-generation error:', error);
-            setGenerationError(error.message);
-            alert("Mind File yaratishda xatolik: " + error.message + "\n\nQo'lda yuklab ko'ring.");
+        } catch (err) {
+            alert("Generatsiya Xatosi: " + err.message);
+            setGenerationError(err.message);
         } finally {
             setIsGenerating(false);
         }
     };
 
-    const createGift = async (overrideMindUrl) => {
+    const submitGift = async (giftPayload) => {
         const token = localStorage.getItem('admin_token');
+        // Ensure PIN
+        if (!giftPayload.pinCode) giftPayload.pinCode = Math.floor(1000 + Math.random() * 9000).toString();
 
-        // Final PIN Generation if empty
-        const finalPin = newGift.pinCode || Math.floor(1000 + Math.random() * 9000).toString();
-
-        const payload = {
-            ...newGift,
-            pinCode: finalPin,
-            targetFile: overrideMindUrl || newGift.targetFile
-        };
-
-        console.log("🎁 Sending Gift Create Request:", payload);
+        console.log("🎁 Submitting Gift Payload:", giftPayload);
 
         try {
             const res = await fetch('/api/admin/gifts', {
@@ -195,52 +175,41 @@ const AdminPanel = () => {
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${token}`
                 },
-                body: JSON.stringify(payload)
+                body: JSON.stringify(giftPayload)
             });
 
-            const responseData = await res.json();
+            const data = await res.json();
 
-            if (res.ok) {
-                console.log("✅ Gift Created Successfully:", responseData);
-                alert(`Sovg'a Yaratildi! PIN: ${responseData.pinCode}`);
-                setNewGift({ clientName: '', videoUrl: '', targetFile: '', thumbnailUrl: '', pinCode: '' });
-                setGenerationError(null);
-                fetchData();
-                setTab('list');
-            } else {
-                console.error("❌ Server Rejected Creation:", responseData);
-                alert('Xatolik: ' + (responseData.error || 'Noma\'lum xato'));
+            if (!res.ok) {
+                alert(`XATOLIK (${res.status}): ${data.message || data.error}`);
+                return;
             }
-        } catch (error) {
-            console.error('❌ Network/Client Error:', error);
-            alert('Tarmoq xatosi: ' + error.message);
+
+            alert(`✅ SOVG'A YARATILDI!\nPIN: ${data.pinCode}`);
+            setNewGift({ clientName: '', videoUrl: '', targetFile: '', thumbnailUrl: '', pinCode: '' });
+            fetchData();
+            setTab('list');
+
+        } catch (err) {
+            alert("Tarmoq xatosi: " + err.message);
         }
     };
 
     const handleDelete = async (id) => {
-        if (!confirm('O\'chirilsinmi?')) return;
+        if (!confirm("O'chirilsinmi?")) return;
         const token = localStorage.getItem('admin_token');
-        try {
-            await fetch(`/api/admin/gifts/${id}`, {
-                method: 'DELETE',
-                headers: { 'Authorization': `Bearer ${token}` }
-            });
-            fetchData();
-        } catch (e) {
-            alert("O'chirishda xatolik");
-        }
+        await fetch(`/api/admin/gifts/${id}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` } });
+        fetchData();
     };
+
 
     if (!isLoggedIn) {
         return (
             <div className="modal-overlay">
                 <div className="modal-content glass">
-                    <h2 style={{ color: 'var(--primary)', marginBottom: '30px' }}>Pinhan Box Admin</h2>
-                    <div className="form-group">
-                        <input type="password" placeholder="Parol" value={password} onChange={e => setPassword(e.target.value)} />
-                    </div>
-                    <button onClick={() => checkAuth(password)} className="btn-primary" style={{ width: '100%' }}>KIRISH</button>
-                    {isLoading && <p>Yuklanmoqda...</p>}
+                    <h2>Admin Login</h2>
+                    <input type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="Parol" style={{ margin: '20px 0', padding: '10px' }} />
+                    <button onClick={() => checkAuth(password)} className="btn-primary" disabled={isLoading}>{isLoading ? '...' : 'KIRISH'}</button>
                 </div>
             </div>
         );
@@ -249,78 +218,62 @@ const AdminPanel = () => {
     return (
         <div className="admin-page">
             <header className="admin-header">
-                <h1 style={{ color: 'var(--primary)' }}>PINHAN BOX</h1>
+                <h1>Pinhan Admin</h1>
                 <button onClick={handleLogout} className="nav-btn">Chiqish</button>
             </header>
-
             <nav className="admin-nav">
-                <button onClick={() => setTab('dashboard')} className={`nav-btn ${tab === 'dashboard' ? 'active' : ''}`}>DASHBOARD</button>
-                <button onClick={() => setTab('list')} className={`nav-btn ${tab === 'list' ? 'active' : ''}`}>SOVG'ALAR</button>
-                <button onClick={() => setTab('create')} className={`nav-btn ${tab === 'create' ? 'active' : ''}`}>YANGI QO'SHISH</button>
-                <button onClick={() => setTab('settings')} className={`nav-btn ${tab === 'settings' ? 'active' : ''}`}>SOZLAMALAR</button>
+                <button onClick={() => setTab('dashboard')} className={tab === 'dashboard' ? 'active' : ''}>Dashboard</button>
+                <button onClick={() => setTab('list')} className={tab === 'list' ? 'active' : ''}>Sovg'alar</button>
+                <button onClick={() => setTab('create')} className={tab === 'create' ? 'active' : ''}>Yangi</button>
+                <button onClick={() => setTab('settings')} className={tab === 'settings' ? 'active' : ''}>Sozlamalar</button>
             </nav>
 
             <main className="admin-content">
                 {tab === 'dashboard' && <Dashboard stats={stats} />}
-                {tab === 'list' && <GiftsList gifts={gifts} isLoading={false} onSelect={setSelectedGift} onReset={() => { }} onDelete={handleDelete} />}
+                {tab === 'list' && <GiftsList gifts={gifts} onDelete={handleDelete} onSelect={setSelectedGift} />}
                 {tab === 'create' && (
-                    <div style={{ padding: '0 40px' }}>
-                        <div className="glass" style={{ padding: '40px', maxWidth: '800px' }}>
-                            <h3>Yangi Sovg'a</h3>
-
+                    <div style={{ padding: '20px' }}>
+                        <div className="glass" style={{ padding: '30px', maxWidth: '600px' }}>
+                            <h3>Yangi Sovg'a Yaratish</h3>
                             <div className="form-group">
-                                <label>Mijoz Ismi</label>
-                                <input value={newGift.clientName} onChange={e => setNewGift({ ...newGift, clientName: e.target.value })} placeholder="Ism kiriting" />
+                                <label>Mijoz Ismi:</label>
+                                <input value={newGift.clientName} onChange={e => setNewGift({ ...newGift, clientName: e.target.value })} />
                             </div>
-
                             <div className="form-group">
-                                <label>PIN Kod (Ixtiyoriy)</label>
-                                <input value={newGift.pinCode} onChange={e => setNewGift({ ...newGift, pinCode: e.target.value })} placeholder="Bo'sh qolsa avtomatik generatsiya bo'ladi" />
+                                <label>PIN (Ixtiyoriy):</label>
+                                <input value={newGift.pinCode} onChange={e => setNewGift({ ...newGift, pinCode: e.target.value })} />
                             </div>
-
-                            <hr style={{ borderColor: '#333', margin: '20px 0' }} />
-
+                            <hr style={{ margin: '20px 0', borderColor: '#444' }} />
                             <div className="form-group">
-                                <label>1. Video Yuklash (.mp4)</label>
+                                <label>1. Video (.mp4) {newGift.videoUrl && '✅'}</label>
                                 <input type="file" onChange={e => handleFileUpload(e, 'videoUrl')} />
-                                {newGift.videoUrl && <p style={{ color: 'var(--success)', fontSize: '12px' }}>✅ Video: {newGift.videoUrl.slice(-20)}</p>}
                             </div>
-
                             <div className="form-group">
-                                <label>2. Marker Rasmi (.jpg)</label>
-                                <input type="file" accept="image/*" onChange={e => handleFileUpload(e, 'thumbnailUrl')} disabled={isGenerating} />
-                                {newGift.thumbnailUrl && <p style={{ color: 'var(--success)', fontSize: '12px' }}>✅ Rasm: {newGift.thumbnailUrl.slice(-20)}</p>}
+                                <label>2. Rasm (.jpg) {newGift.thumbnailUrl && '✅'}</label>
+                                <input type="file" accept="image/*" onChange={e => handleFileUpload(e, 'thumbnailUrl')} />
                             </div>
-
                             {generationError && (
-                                <div style={{ background: '#ff444420', border: '1px solid #ff4444', borderRadius: '12px', padding: '15px', marginBottom: '20px' }}>
-                                    <p style={{ color: '#ff4444', fontSize: '14px', marginBottom: '10px' }}>⚠️ Avtomatik generatsiya xatosi: {generationError}</p>
-                                    <div className="form-group" style={{ marginBottom: 0 }}>
-                                        <label>Qo'lda .mind fayl yuklash</label>
-                                        <input type="file" accept=".mind" onChange={e => handleFileUpload(e, 'targetFile')} />
-                                        {newGift.targetFile && <p style={{ color: 'var(--success)', fontSize: '12px' }}>✅ Mind fayl tayyor</p>}
-                                    </div>
+                                <div style={{ color: 'red', border: '1px solid red', padding: '10px', borderRadius: '5px' }}>
+                                    <p>Avto-generatsiya xatosi: {generationError}</p>
+                                    <label>Qo'lda Mind Fayl Yuklash:</label>
+                                    <input type="file" accept=".mind" onChange={e => handleFileUpload(e, 'targetFile')} />
                                 </div>
                             )}
-
-                            <button onClick={handleCreate} disabled={isUploading || isGenerating} className="btn-primary" style={{ marginTop: '20px', width: '100%' }}>
-                                {isGenerating ? 'GENERATE QILINMOQDA (Kuting)...' : isUploading ? 'YUKLANMOQDA...' : 'SAQLASH & PIN OLISH'}
+                            <button onClick={handleCreate} disabled={isUploading || isGenerating} className="btn-primary" style={{ width: '100%', marginTop: '20px' }}>
+                                {isUploading ? 'YUKLANMOQDA...' : isGenerating ? 'GENERATSIYA...' : 'YARATISH'}
                             </button>
                         </div>
                     </div>
                 )}
-                {tab === 'settings' && <SettingsPanel password={password} />}
+                {tab === 'settings' && <SettingsPanel />}
             </main>
 
             {selectedGift && (
                 <div className="modal-overlay" onClick={() => setSelectedGift(null)}>
                     <div className="modal-content" onClick={e => e.stopPropagation()}>
-                        <h2>QR Kod & PIN</h2>
-                        <div style={{ background: '#fff', padding: '20px', margin: '20px 0', display: 'inline-block', borderRadius: '10px' }}>
-                            <QRCode value={`${window.location.origin}?id=${selectedGift.pinCode}`} />
-                        </div>
-                        <h1>{selectedGift.pinCode}</h1>
-                        <button onClick={() => setSelectedGift(null)} className="nav-btn">Yopish</button>
+                        <h2>{selectedGift.pinCode}</h2>
+                        <QRCode value={`${window.location.origin}?id=${selectedGift.pinCode}`} />
+                        <button onClick={() => setSelectedGift(null)} className="nav-btn" style={{ marginTop: '20px' }}>Yopish</button>
                     </div>
                 </div>
             )}
