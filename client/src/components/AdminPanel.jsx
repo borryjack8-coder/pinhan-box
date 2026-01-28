@@ -14,6 +14,7 @@ const AdminPanel = () => {
     const [isLoading, setIsLoading] = useState(false);
     const [newGift, setNewGift] = useState({ clientName: '', videoUrl: '', targetFile: '', thumbnailUrl: '', pinCode: '' });
     const [selectedGift, setSelectedGift] = useState(null);
+    const [isGenerating, setIsGenerating] = useState(false);
 
     const checkAuth = async (pass) => {
         const res = await fetch('/api/admin/gifts', {
@@ -71,18 +72,49 @@ const AdminPanel = () => {
     };
 
     const handleCreate = async () => {
-        const res = await fetch('/api/admin/gifts', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${password}`
-            },
-            body: JSON.stringify(newGift)
-        });
-        if (res.ok) {
-            setNewGift({ clientName: '', videoUrl: '', targetFile: '', thumbnailUrl: '', pinCode: '' });
-            fetchData();
-            setTab('list');
+        if (!newGift.thumbnailUrl) {
+            alert('Marker rasmini yuklang!');
+            return;
+        }
+
+        setIsGenerating(true);
+        try {
+            // Auto-generate .mind file from thumbnail
+            const mindRes = await fetch('/api/admin/generate-mind', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${password}`
+                },
+                body: JSON.stringify({ imageUrl: newGift.thumbnailUrl })
+            });
+
+            if (!mindRes.ok) {
+                throw new Error('Mind file generation failed');
+            }
+
+            const { mindUrl } = await mindRes.json();
+
+            // Create gift with auto-generated .mind file
+            const res = await fetch('/api/admin/gifts', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${password}`
+                },
+                body: JSON.stringify({ ...newGift, targetFile: mindUrl })
+            });
+
+            if (res.ok) {
+                setNewGift({ clientName: '', videoUrl: '', targetFile: '', thumbnailUrl: '', pinCode: '' });
+                fetchData();
+                setTab('list');
+            }
+        } catch (error) {
+            console.error('Gift creation error:', error);
+            alert('Sovg\'a yaratishda xatolik: ' + error.message);
+        } finally {
+            setIsGenerating(false);
         }
     };
 
@@ -146,16 +178,11 @@ const AdminPanel = () => {
                             </div>
                             <div className="form-group">
                                 <label>Marker Rasmi (.jpg/.png)</label>
-                                <input type="file" accept="image/*" onChange={e => handleFileUpload(e, 'thumbnailUrl')} />
-                                {newGift.thumbnailUrl && <p style={{ color: 'var(--success)', fontSize: '12px' }}>✅ Rasm tayyor</p>}
+                                <input type="file" accept="image/*" onChange={e => handleFileUpload(e, 'thumbnailUrl')} disabled={isGenerating} />
+                                {newGift.thumbnailUrl && <p style={{ color: 'var(--success)', fontSize: '12px' }}>✅ Rasm tayyor (.mind fayl avtomatik yaratiladi)</p>}
                             </div>
-                            <div className="form-group">
-                                <label>Mind Fayl (.mind)</label>
-                                <input type="file" accept=".mind" onChange={e => handleFileUpload(e, 'targetFile')} />
-                                {newGift.targetFile && <p style={{ color: 'var(--success)', fontSize: '12px' }}>✅ Mind fayl tayyor</p>}
-                            </div>
-                            <button onClick={handleCreate} disabled={isUploading} className="btn-primary">
-                                {isUploading ? 'YUKLANMOQDA...' : 'SOVG\'ANI YARATISH'}
+                            <button onClick={handleCreate} disabled={isUploading || isGenerating} className="btn-primary">
+                                {isGenerating ? 'TAYYORLANMOQDA (15-20 soniya)...' : isUploading ? 'YUKLANMOQDA...' : 'SOVG\'ANI YARATISH'}
                             </button>
                         </div>
                     </div>

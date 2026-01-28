@@ -8,6 +8,8 @@ const cloudinary = require('cloudinary').v2;
 const { CloudinaryStorage } = require('multer-storage-cloudinary');
 const Gift = require('./models/Gift');
 const Settings = require('./models/Settings');
+const { generateMindFile } = require('./services/mindCompiler');
+const fs = require('fs');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -83,6 +85,48 @@ app.post('/api/verify-pin', async (req, res) => {
 app.post('/api/admin/upload', adminAuth, upload.single('file'), (req, res) => {
     if (!req.file) return res.status(400).json({ error: 'Fayl yuklanmadi' });
     res.json({ url: req.file.path });
+});
+
+// Auto-generate .mind file from marker image
+app.post('/api/admin/generate-mind', adminAuth, async (req, res) => {
+    try {
+        const { imageUrl } = req.body;
+        if (!imageUrl) return res.status(400).json({ error: 'Image URL required' });
+
+        console.log('🎯 Starting .mind file generation for:', imageUrl);
+
+        // Generate .mind file
+        const tempMindPath = `./temp_${Date.now()}.mind`;
+        await generateMindFile(imageUrl, tempMindPath);
+
+        // Upload .mind file to Cloudinary
+        const mindFileBuffer = fs.readFileSync(tempMindPath);
+        const uploadResult = await new Promise((resolve, reject) => {
+            const uploadStream = cloudinary.uploader.upload_stream(
+                {
+                    folder: 'pinhan_gifts',
+                    resource_type: 'raw',
+                    public_id: `mind_${Date.now()}`,
+                    format: 'mind'
+                },
+                (error, result) => {
+                    if (error) reject(error);
+                    else resolve(result);
+                }
+            );
+            uploadStream.end(mindFileBuffer);
+        });
+
+        // Cleanup temp file
+        fs.unlinkSync(tempMindPath);
+
+        console.log('✅ .mind file generated and uploaded:', uploadResult.secure_url);
+
+        res.json({ mindUrl: uploadResult.secure_url });
+    } catch (error) {
+        console.error('❌ Mind generation error:', error);
+        res.status(500).json({ error: 'Failed to generate .mind file', details: error.message });
+    }
 });
 
 app.get('/api/admin/gifts', adminAuth, async (req, res) => {
