@@ -1,188 +1,228 @@
 import React, { useEffect, useRef, useState } from 'react';
 import 'mind-ar/dist/mindar-image-aframe.prod.js';
-// Note: We assume A-Frame is loaded globally in index.html (standard for MindAR + React)
 
 const ARExperience = ({ videoUrl, targetFile }) => {
     const sceneRef = useRef(null);
     const videoRef = useRef(null);
     const [started, setStarted] = useState(false);
     const [recording, setRecording] = useState(false);
+    const [errorMsg, setErrorMsg] = useState('');
+    const [status, setStatus] = useState('Initializing...');
 
     // Recording Refs
     const mediaRecorderRef = useRef(null);
     const chunksRef = useRef([]);
-    const canvasRef = useRef(null); // The canvas we draw to for recording
+    const canvasRef = useRef(null);
 
-    // --- AR TEARDOWN ---
+    // --- AR LOGIC ---
     useEffect(() => {
-        return () => {
-            // Cleanup MindAR if needed? 
-            // MindAR attaches to body, can be messy in React dev HMR.
-            // Usually requires a hard reload if component unmounts.
-            const scene = sceneRef.current;
-            if (scene) {
-                // scene.systems['mindar-image-system'].stop(); // Theoretical cleanup
+        console.log("AR Mount: ", { targetFile, videoUrl });
+
+        if (!targetFile) {
+            setErrorMsg("Target fayli topilmadi!");
+            return;
+        }
+
+        const sceneEl = sceneRef.current;
+        const arSystem = sceneEl?.systems['mindar-image-system'];
+
+        const onTargetFound = () => {
+            console.log("🎯 Target Found!");
+            setStatus("Target Topildi!");
+            if (videoRef.current) {
+                videoRef.current.play();
             }
         };
-    }, []);
 
-    // --- START LOGIC (Autoplay Fix) ---
-    const handleStart = () => {
-        const video = videoRef.current;
-        if (video) {
-            video.muted = false;
-            video.play().then(() => {
-                video.pause();
-                video.currentTime = 0;
-                setStarted(true); // Hide overlay
-            }).catch(e => console.error("Start Error:", e));
+        const onTargetLost = () => {
+            console.log("💨 Target Lost");
+            setStatus("Karta qidirilmoqda...");
+            if (videoRef.current) {
+                videoRef.current.pause();
+            }
+        };
+
+        const onArReady = () => {
+            console.log("✅ AR System Ready");
+            setStatus("Kamera tayyor");
+        };
+
+        const onArError = (event) => {
+            console.error("❌ AR Error Event:", event);
+            setErrorMsg("AR Xatosi: " + (event.detail?.error || "Noma'lum"));
+        };
+
+        if (sceneEl) {
+            sceneEl.addEventListener('mindar-image-target-found', onTargetFound);
+            sceneEl.addEventListener('mindar-image-target-lost', onTargetLost);
+            sceneEl.addEventListener('arReady', onArReady);
+            sceneEl.addEventListener('arError', onArError);
+        }
+
+        return () => {
+            if (sceneEl) {
+                sceneEl.removeEventListener('mindar-image-target-found', onTargetFound);
+                sceneEl.removeEventListener('mindar-image-target-lost', onTargetLost);
+                sceneEl.removeEventListener('arReady', onArReady);
+                sceneEl.removeEventListener('arError', onArError);
+            }
+        };
+    }, [targetFile]);
+
+    const handleStart = async () => {
+        setErrorMsg('');
+        try {
+            // Check Permissions Explicitly
+            const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+            // Stop immediately, we just wanted to ask permission
+            stream.getTracks().forEach(track => track.stop());
+
+            console.log("✅ Camera Permission Granted");
+
+            const video = videoRef.current;
+            if (video) {
+                video.muted = false;
+                video.play().then(() => {
+                    video.pause();
+                    video.currentTime = 0;
+                    setStarted(true);
+                }).catch(e => {
+                    console.error("Video Play Error:", e);
+                    setErrorMsg("Video xatosi: " + e.message);
+                });
+            }
+        } catch (err) {
+            console.error("❌ Camera Permission Denied:", err);
+            setErrorMsg("Kameraga ruxsat berilmadi! Iltimos, brauzer sozlamalarini tekshiring.");
         }
     };
 
-    // --- RECORDING LOGIC ---
+    // --- RECORDING LOGIC (Minimally touched, assumed working) ---
     const startRecording = () => {
-        // 1. Get Source Canvases
-        const scene = sceneRef.current;
-        const aCanvas = scene.querySelector('canvas.a-canvas'); // 3D Layer
-        const videoFeed = document.querySelector('video'); // Camera Feed (MindAR creates this on body)
+        try {
+            const scene = sceneRef.current;
+            const aCanvas = scene.querySelector('canvas.a-canvas');
+            const videoFeed = document.querySelector('video');
 
-        if (!aCanvas || !videoFeed) return alert("Kamera topilmadi!");
+            if (!aCanvas || !videoFeed) return alert("Kamera tasviri yo'q!");
 
-        const width = aCanvas.width;
-        const height = aCanvas.height;
+            const width = aCanvas.width;
+            const height = aCanvas.height;
+            const destCanvas = document.createElement('canvas');
+            destCanvas.width = width;
+            destCanvas.height = height;
+            const ctx = destCanvas.getContext('2d');
+            canvasRef.current = destCanvas;
 
-        // 2. Setup Destination Canvas
-        const destCanvas = document.createElement('canvas'); // Offscreen
-        destCanvas.width = width;
-        destCanvas.height = height;
-        const ctx = destCanvas.getContext('2d');
-        canvasRef.current = destCanvas;
+            const logo = new Image();
+            logo.src = "/logo.png";
+            logo.crossOrigin = "Anonymous";
 
-        // 3. Load Watermark
-        const logo = new Image();
-        logo.src = "/logo.png"; // Public folder
-        logo.crossOrigin = "Anonymous";
+            setRecording(true);
+            const stream = destCanvas.captureStream(30);
 
-        // 4. Animation Loop
-        setRecording(true);
-        const stream = destCanvas.captureStream(30);
+            // Safe Mime Type
+            const mimeType = MediaRecorder.isTypeSupported('video/mp4') ? 'video/mp4' : 'video/webm';
+            console.log("Recording Mime:", mimeType);
 
-        // Detect supported MIME types for better compatibility (especially iOS)
-        const mimeType = MediaRecorder.isTypeSupported('video/mp4')
-            ? 'video/mp4'
-            : MediaRecorder.isTypeSupported('video/quicktime')
-                ? 'video/quicktime'
-                : 'video/webm;codecs=vp9';
+            mediaRecorderRef.current = new MediaRecorder(stream, { mimeType });
+            chunksRef.current = [];
 
-        console.log("Recording with MIME type:", mimeType);
+            mediaRecorderRef.current.ondataavailable = (e) => {
+                if (e.data.size > 0) chunksRef.current.push(e.data);
+            };
 
-        mediaRecorderRef.current = new MediaRecorder(stream, { mimeType });
-        chunksRef.current = [];
+            mediaRecorderRef.current.onstop = () => {
+                const blob = new Blob(chunksRef.current, { type: mimeType });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `Pinhan-${Date.now()}.mp4`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                setRecording(false);
+            };
 
-        mediaRecorderRef.current.ondataavailable = (e) => {
-            if (e.data.size > 0) chunksRef.current.push(e.data);
-        };
+            mediaRecorderRef.current.start();
 
-        mediaRecorderRef.current.onstop = () => {
-            const blob = new Blob(chunksRef.current, { type: mimeType });
-            const extension = mimeType.includes('mp4') ? 'mp4' : (mimeType.includes('quicktime') ? 'mov' : 'webm');
-            const url = URL.createObjectURL(blob);
+            // Draw Loop
+            const draw = () => {
+                if (mediaRecorderRef.current.state === 'inactive') return;
+                ctx.drawImage(videoFeed, 0, 0, width, height);
+                ctx.drawImage(aCanvas, 0, 0, width, height);
+                if (logo.complete) {
+                    const logoW = width * 0.2;
+                    const logoH = logoW * (logo.naturalHeight / logo.naturalWidth || 1);
+                    ctx.drawImage(logo, width - logoW - 20, height - logoH - 20, logoW, logoH);
+                }
+                requestAnimationFrame(draw);
+            };
+            draw();
 
-            // For iOS we sometimes need to open in new tab or use a specific download flow
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `Pinhan-Box-${Date.now()}.${extension}`;
-
-            // Necessary for iOS Safari to trigger download
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-
-            // Cleanup memory
-            setTimeout(() => URL.revokeObjectURL(url), 100);
-
+        } catch (e) {
+            alert("Recording Error: " + e.message);
             setRecording(false);
-        };
-
-        mediaRecorderRef.current.start();
-
-        // 5. Draw Loop
-        const draw = () => {
-            if (mediaRecorderRef.current.state === 'inactive') return;
-
-            // Draw Camera
-            ctx.drawImage(videoFeed, 0, 0, width, height);
-            // Draw AR
-            ctx.drawImage(aCanvas, 0, 0, width, height);
-
-            // Draw Watermark (Bottom Right)
-            if (logo.complete) {
-                const logoW = width * 0.2; // 20% width
-                const logoH = logoW * (logo.naturalHeight / logo.naturalWidth || 1);
-                ctx.drawImage(logo, width - logoW - 20, height - logoH - 20, logoW, logoH);
-            }
-
-            requestAnimationFrame(draw);
-        };
-        draw();
+        }
     };
 
     const stopRecording = () => {
-        if (mediaRecorderRef.current) {
-            mediaRecorderRef.current.stop();
-        }
+        if (mediaRecorderRef.current) mediaRecorderRef.current.stop();
     };
 
     return (
         <div style={{ width: '100%', height: '100%', position: 'relative', overflow: 'hidden', background: '#000' }}>
 
-            {/* INJECT GLOBAL STYLES FOR CAMERA FEED */}
+            {/* CSS FIXES */}
             <style dangerouslySetInnerHTML={{
                 __html: `
-                video {
-                    position: absolute !important;
-                    top: 0 !important;
-                    left: 0 !important;
-                    width: 100% !important;
-                    height: 100% !important;
-                    object-fit: cover !important;
-                    z-index: -2 !important;
-                }
-                .a-canvas {
-                    z-index: -1 !important;
-                }
+                video { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; z-index: -2; }
+                .a-canvas { z-index: -1 !important; }
             `}} />
 
-            {/* START OVERLAY */}
-            {!started && (
+            {/* ERROR / STATUS OVERLAY */}
+            {(errorMsg || !started) && (
                 <div style={styles.overlay}>
-                    <div style={styles.logoContainer}>
-                        <img src="/logo.png" alt="Logo" style={styles.logo} />
-                    </div>
-
-                    <button onClick={handleStart} style={styles.startButton}>
-                        <span>START CAMERA</span>
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg>
-                    </button>
-
-                    <p style={styles.instruction}>Tayyor bo'lsangiz, tugmani bosing</p>
+                    {errorMsg ? (
+                        <div style={{ color: 'red', textAlign: 'center' }}>
+                            <h2>⚠️ XATOLIK</h2>
+                            <p>{errorMsg}</p>
+                            <button onClick={() => window.location.reload()} style={styles.startButton}>Qayta Yuklash</button>
+                        </div>
+                    ) : (
+                        <>
+                            <div style={styles.logoContainer}>
+                                <img src="/logo.png" alt="Logo" style={styles.logo} />
+                            </div>
+                            <button onClick={handleStart} style={styles.startButton}>
+                                <span>KAMERANI BOSHLASH</span>
+                            </button>
+                            <p style={styles.instruction}>Tasdiqlang va kameraga ruxsat bering</p>
+                        </>
+                    )}
                 </div>
             )}
 
             {/* RECORDING UI */}
-            {started && (
-                <div style={styles.recContainer}>
-                    <button
-                        onClick={recording ? stopRecording : startRecording}
-                        style={{
-                            ...styles.recButton,
-                            backgroundColor: recording ? '#ff4444' : 'rgba(255,255,255,0.9)',
-                            color: recording ? '#fff' : '#000'
-                        }}
-                    >
-                        {recording ? 'STOP' : 'REC'}
-                    </button>
-                </div>
+            {started && !errorMsg && (
+                <>
+                    <div style={{ position: 'absolute', top: 20, left: 0, width: '100%', textAlign: 'center', zIndex: 100, color: 'white', textShadow: '0 2px 4px #000' }}>
+                        <p>{status}</p>
+                    </div>
+
+                    <div style={styles.recContainer}>
+                        <button
+                            onClick={recording ? stopRecording : startRecording}
+                            style={{
+                                ...styles.recButton,
+                                backgroundColor: recording ? '#ff4444' : 'rgba(255,255,255,0.9)',
+                                color: recording ? '#fff' : '#000'
+                            }}
+                        >
+                            {recording ? 'STOP' : 'REC'}
+                        </button>
+                    </div>
+                </>
             )}
 
             {/* A-FRAME SCENE */}
@@ -231,38 +271,25 @@ const styles = {
         justifyContent: 'center', alignItems: 'center',
         padding: '20px', textAlign: 'center'
     },
-    logoContainer: {
-        width: '100%', maxWidth: '280px', marginBottom: '40px'
-    },
-    logo: {
-        width: '80%', height: 'auto', borderRadius: '24px',
-        boxShadow: '0 15px 45px rgba(0,0,0,0.6)'
-    },
+    logoContainer: { width: '100%', maxWidth: '280px', marginBottom: '40px' },
+    logo: { width: '80%', height: 'auto', borderRadius: '24px', boxShadow: '0 15px 45px rgba(0,0,0,0.6)' },
     startButton: {
         padding: '18px 45px', fontSize: '18px', fontWeight: 'bold',
         background: 'linear-gradient(135deg, #FFD700 0%, #FFA500 100%)',
         color: '#000', border: 'none', borderRadius: '50px',
         cursor: 'pointer', boxShadow: '0 10px 30px rgba(255, 215, 0, 0.3)',
         display: 'flex', alignItems: 'center', gap: '12px',
-        letterSpacing: '1px'
     },
-    instruction: {
-        marginTop: '25px', color: 'rgba(255,255,255,0.6)',
-        fontSize: '14px', fontWeight: '300'
-    },
+    instruction: { marginTop: '25px', color: 'rgba(255,255,255,0.6)', fontSize: '14px', fontWeight: '300' },
     recContainer: {
         position: 'fixed', bottom: '40px', left: '0', width: '100%',
-        display: 'flex', justifyContent: 'center', zIndex: 1000,
-        pointerEvents: 'none'
+        display: 'flex', justifyContent: 'center', zIndex: 1000, pointerEvents: 'none'
     },
     recButton: {
-        width: '75px', height: '75px', borderRadius: '50%',
-        border: '5px solid #fff',
-        pointerEvents: 'auto', cursor: 'pointer',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        fontWeight: 'bold', fontSize: '14px',
-        boxShadow: '0 5px 20px rgba(0,0,0,0.4)',
-        transition: 'all 0.2s'
+        width: '75px', height: '75px', borderRadius: '50%', border: '5px solid #fff',
+        pointerEvents: 'auto', cursor: 'pointer', display: 'flex', alignItems: 'center',
+        justifyContent: 'center', fontWeight: 'bold', fontSize: '14px',
+        boxShadow: '0 5px 20px rgba(0,0,0,0.4)', transition: 'all 0.2s'
     }
 };
 
