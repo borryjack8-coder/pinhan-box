@@ -9,7 +9,6 @@ import { motion, AnimatePresence } from 'framer-motion';
 function App() {
     const [step, setStep] = useState('pin');
     const [pin, setPin] = useState('');
-    const [error, setError] = useState('');
     const [giftData, setGiftData] = useState(null);
     const [showScanner, setShowScanner] = useState(false);
     const [settings, setSettings] = useState({ telegram: '', instagram: '', phone: '' });
@@ -17,17 +16,17 @@ function App() {
     // Cloudinary URL Optimizer
     const optimizeUrl = (url) => {
         if (!url || !url.includes('cloudinary.com')) return url;
-        // In Cloudinary, we can inject parameters after /upload/
         if (url.includes('/upload/')) {
             return url.replace('/upload/', '/upload/f_auto,q_auto/');
         }
         return url;
     };
 
-    // Simple Path Routing
+    // Routing Checks
     const isInternalAdmin = window.location.pathname === '/admin';
+    const isViewRoute = window.location.pathname === '/view';
 
-    // Initialize Device ID & Settings
+    // Initialize
     useEffect(() => {
         let devId = localStorage.getItem('pinhan_device_id');
         if (!devId) {
@@ -35,18 +34,24 @@ function App() {
             localStorage.setItem('pinhan_device_id', devId);
         }
 
-        // Fetch Settings
-        fetch('/api/settings')
-            .then(res => res.json())
-            .then(data => setSettings(data));
+        // Settings
+        fetch('/api/settings').then(res => res.json()).then(setSettings).catch(() => { });
 
-        // Check for ID in URL on load
+        // Check for ID (Legacy PIN via URL)
         const urlParams = new URLSearchParams(window.location.search);
         const urlId = urlParams.get('id');
+
+        // If /view route is active, we SKIP standard PIN logic and let ARExperience fetch data
+        if (isViewRoute && urlId) {
+            setStep('ar'); // Go directly to AR, ARExperience component will handle fetching by ID
+            return;
+        }
+
+        // Legacy: If id is present on root (mostly PIN sharing), try auto-verify
         if (urlId) {
             handleVerify(null, urlId);
         }
-    }, []);
+    }, [isViewRoute]);
 
     const handleVerify = async (e, directId) => {
         const targetPin = directId || pin;
@@ -61,7 +66,7 @@ function App() {
             const res = await fetch('/api/verify-pin', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ pinCode: pin, deviceId })
+                body: JSON.stringify({ pinCode: targetPin, deviceId }) // FIX: Use targetPin
             });
 
             const data = await res.json();
@@ -80,18 +85,30 @@ function App() {
         }
     };
 
-    // ADMIN VIEW
-    if (isInternalAdmin) {
-        return <AdminPanel />;
+    // ADMIN
+    if (isInternalAdmin) return <AdminPanel />;
+
+    // AR VIEW
+    // If step is AR, we render ARExperience.
+    // Logic: If giftData exists, pass it (Legacy/PIN flow).
+    // If giftData is null (View flow), pass null, and ARExperience will fetch from URL.
+    if (step === 'ar') {
+        return (
+            <div style={{ width: '100vw', height: '100vh', background: 'black' }}>
+                <ARExperience
+                    videoUrl={giftData ? optimizeUrl(giftData.videoUrl) : null}
+                    targetFile={giftData ? giftData.targetFile : null}
+                />
+            </div>
+        );
     }
 
-    // PUBLIC VIEW
+    // PUBLIC VIEW (PIN)
     return (
         <div className="app-container" style={{ width: '100vw', height: '100vh', background: 'var(--bg-color)', color: '#fff', overflow: 'hidden' }}>
             <Toaster position="top-center" reverseOrder={false} />
 
             <AnimatePresence mode="wait">
-                {/* 1. PIN ENTRY SCREEN */}
                 {step === 'pin' && (
                     <motion.div
                         key="pin"
@@ -101,12 +118,14 @@ function App() {
                         className="center-col"
                         style={styles.centerCol}
                     >
+                        {/* Logo & Intro */}
                         <div className="logo-section" style={{ marginBottom: '40px' }}>
                             <img src="/logo.png" alt="Logo" style={{ width: '120px', height: 'auto', borderRadius: '20px', marginBottom: '15px' }} />
                             <h1 style={{ color: 'var(--primary)', fontSize: '42px', fontWeight: 'bold', margin: 0 }}>PINHAN BOX</h1>
                             <p style={{ color: 'var(--text-dim)', fontSize: '14px', letterSpacing: '1px' }}>PREMIUM AR EXPERIENCE</p>
                         </div>
 
+                        {/* Input Card */}
                         <div className="glass-card glass" style={{ padding: '40px', width: '90%', maxWidth: '400px' }}>
                             <p style={{ color: 'var(--text-dim)', marginBottom: '20px' }}>Sovg'ani ochish uchun PIN kodni kiriting</p>
 
@@ -132,7 +151,7 @@ function App() {
                             </button>
                         </div>
 
-                        {/* Footer Contacts */}
+                        {/* Footer */}
                         <div style={{ position: 'fixed', bottom: '30px', display: 'flex', gap: '20px' }}>
                             {settings.telegram && <a href={`https://t.me/${settings.telegram.replace('@', '')}`} target="_blank" className="nav-btn">Telegram</a>}
                             {settings.instagram && <a href={`https://instagram.com/${settings.instagram}`} target="_blank" className="nav-btn">Instagram</a>}
@@ -140,33 +159,10 @@ function App() {
                     </motion.div>
                 )}
 
-                {/* 2. LOADING SCREEN */}
                 {step === 'loading' && (
-                    <motion.div
-                        key="loading"
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        exit={{ opacity: 0 }}
-                        style={styles.centerCol}
-                    >
+                    <motion.div key="loading" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} style={styles.centerCol}>
                         <div className="loader" style={styles.spinner}></div>
                         <h2 style={{ marginTop: '20px', color: 'var(--primary)', fontSize: '18px' }}>Tayyorlanmoqda...</h2>
-                    </motion.div>
-                )}
-
-                {/* 3. AR EXPERIENCE */}
-                {step === 'ar' && giftData && (
-                    <motion.div
-                        key="ar"
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        transition={{ duration: 1 }}
-                        style={{ width: '100%', height: '100%' }}
-                    >
-                        <ARExperience
-                            videoUrl={optimizeUrl(giftData.videoUrl)}
-                            targetFile={giftData.targetFile}
-                        />
                     </motion.div>
                 )}
             </AnimatePresence>

@@ -243,6 +243,18 @@ app.delete('/api/admin/gifts/:id', adminAuth, async (req, res) => {
     catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// Public Gift Fetch (For AR View)
+app.get('/api/gifts/:id', async (req, res) => {
+    try {
+        const gift = await Gift.findById(req.params.id);
+        if (!gift) return res.status(404).json({ error: "Gift not found" });
+        res.json(gift);
+    } catch (e) {
+        console.error("Fetch Gift Error:", e);
+        res.status(500).json({ error: e.message });
+    }
+});
+
 // Analytics & Settings
 app.get('/api/admin/analytics', adminAuth, async (req, res) => { /* ... Keep simple ... */
     try {

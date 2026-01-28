@@ -14,14 +14,15 @@ const AdminPanel = () => {
     const [isLoading, setIsLoading] = useState(false);
     const [isGenerating, setIsGenerating] = useState(false);
     const [generationError, setGenerationError] = useState(null);
-    const [selectedGift, setSelectedGift] = useState(null);
+    const [selectedGift, setSelectedGift] = useState(null); // Used for List view modal
+    const [createdGift, setCreatedGift] = useState(null);   // Used for Success modal
 
     // CHANGED: Renamed thumbnailUrl -> markerUrl for consistency
     const [newGift, setNewGift] = useState({
         clientName: '',
         videoUrl: '',
         targetFile: '',
-        markerUrl: '', // previously thumbnailUrl
+        markerUrl: '',
         pinCode: ''
     });
 
@@ -107,14 +108,9 @@ const AdminPanel = () => {
 
             console.log(`✅ Upload Success (${type}):`, data);
 
-            // Map the response URL to the correct state property
-            // Note: server returns { url: "..." } or { mindUrl: "..." }
-
             if (type === 'targetFile') {
-                // Manual Mind File
                 setNewGift(prev => ({ ...prev, targetFile: data.mindUrl || data.url }));
             } else {
-                // Video or Marker
                 setNewGift(prev => ({ ...prev, [type]: data.url }));
             }
 
@@ -129,12 +125,10 @@ const AdminPanel = () => {
     const handleCreate = async () => {
         console.log("🛠️ Starting Gift Creation. Current State:", newGift);
 
-        // 1. Validation
         if (!newGift.clientName) return alert("Iltimos, Mijoz ismini kiriting");
         if (!newGift.videoUrl) return alert("Video faylni yuklang");
         if (!newGift.markerUrl) return alert("Marker rasmini yuklang");
 
-        // 2. Logic Split: Manual Mind File vs Auto-Generate
         if (newGift.targetFile) {
             console.log("⏩ Manual Mind File detected. Skipping generation.");
             await submitGift(newGift);
@@ -148,8 +142,6 @@ const AdminPanel = () => {
         setIsGenerating(true);
         try {
             const token = localStorage.getItem('admin_token');
-
-            // CRITICAL: Map markerUrl to imageUrl for the backend
             const generationPayload = { imageUrl: newGift.markerUrl };
 
             console.log("⚙️ Calling /generate-mind with:", generationPayload);
@@ -169,16 +161,12 @@ const AdminPanel = () => {
             console.log("✅ Mind Generated Successfully:", data.mindUrl);
 
             const readyGift = { ...newGift, targetFile: data.mindUrl };
-
-            // Update UI State for clarity
             setNewGift(readyGift);
-
-            // Submit immediately
             await submitGift(readyGift);
 
         } catch (err) {
             console.error("Generatsiya Xatosi:", err);
-            alert("Generatsiya Xatosi: " + err.message + "\n\nIltimos, .mind fayl yuklab ko'ring.");
+            alert("Generatsiya Xatosi: " + err.message);
             setGenerationError(err.message);
         } finally {
             setIsGenerating(false);
@@ -187,21 +175,11 @@ const AdminPanel = () => {
 
     const submitGift = async (giftPayload) => {
         const token = localStorage.getItem('admin_token');
+        if (!giftPayload.pinCode) giftPayload.pinCode = Math.floor(1000 + Math.random() * 9000).toString();
 
-        // Auto-Generate PIN if missing
-        if (!giftPayload.pinCode) {
-            giftPayload.pinCode = Math.floor(1000 + Math.random() * 9000).toString();
-        }
-
-        // Ensure thumbnailUrl is populated for DB (map back from markerUrl if needed by Schema)
-        // Assuming DB schema has `thumbnailUrl`, we should send it.
-        // If DB has `markerUrl`, fine. But let's send both or ensure mapping.
-        // server.js uses `req.body` directly.
-        // Let's ensure we match what server/schema likely wants. 
-        // If previously it was thumbnailUrl, let's include it.
         const finalPayload = {
             ...giftPayload,
-            thumbnailUrl: giftPayload.markerUrl // Map markerUrl -> thumbnailUrl for DB compatibility
+            thumbnailUrl: giftPayload.markerUrl
         };
 
         console.log("🎁 Submitting Final Payload:", finalPayload);
@@ -224,13 +202,16 @@ const AdminPanel = () => {
             }
 
             // SUCCESS
-            const createdGift = data.gift || data;
-            alert(`✅ SOVG'A YARATILDI!\n\nMijoz: ${createdGift.clientName}\nPIN: ${createdGift.pinCode}`);
+            const gift = data.gift || data;
+            console.log("✅ Created Gift:", gift);
 
-            // Reset Form (using markerUrl)
+            // Show Success Modal with QR Code
+            setCreatedGift(gift);
+
+            // Allow user to see the success before clearing form? 
+            // Better to clear form behind the modal.
             setNewGift({ clientName: '', videoUrl: '', targetFile: '', markerUrl: '', pinCode: '' });
             setGenerationError(null);
-
             fetchData();
             setTab('list');
 
@@ -246,7 +227,6 @@ const AdminPanel = () => {
         fetchData();
     };
 
-
     if (!isLoggedIn) {
         return (
             <div className="modal-overlay">
@@ -258,6 +238,33 @@ const AdminPanel = () => {
             </div>
         );
     }
+
+    // Modal for New Gift Success
+    const renderSuccessModal = () => {
+        if (!createdGift) return null;
+        const viewUrl = `${window.location.origin}/view?id=${createdGift._id}`;
+
+        return (
+            <div className="modal-overlay" onClick={() => setCreatedGift(null)}>
+                <div className="modal-content" onClick={e => e.stopPropagation()} style={{ textAlign: 'center' }}>
+                    <h2 style={{ color: 'green', marginBottom: '20px' }}>✅ Sovg'a Yaratildi!</h2>
+
+                    <div style={{ background: 'white', padding: '20px', borderRadius: '10px', display: 'inline-block', marginBottom: '20px' }}>
+                        <QRCode value={viewUrl} size={200} />
+                    </div>
+
+                    <p style={{ marginBottom: '10px' }}><strong>Mijoz:</strong> {createdGift.clientName}</p>
+                    <p style={{ marginBottom: '20px', fontSize: '24px', fontWeight: 'bold' }}>PIN: {createdGift.pinCode}</p>
+
+                    <a href={viewUrl} target="_blank" rel="noopener noreferrer" style={{ color: 'gold', display: 'block', marginBottom: '20px' }}>
+                        Linkni ochish
+                    </a>
+
+                    <button onClick={() => setCreatedGift(null)} className="btn-primary">Yopish</button>
+                </div>
+            </div>
+        );
+    };
 
     return (
         <div className="admin-page">
@@ -302,13 +309,12 @@ const AdminPanel = () => {
                                 <input type="file" accept="image/*" onChange={e => handleFileUpload(e, 'markerUrl')} />
                             </div>
 
-                            {/* ERROR / MANUAL OVERRIDE SECTION */}
                             {(generationError || !isGenerating) && (
                                 <div style={{ marginTop: '20px', padding: '15px', border: '1px dashed #555', borderRadius: '8px' }}>
                                     {generationError && <p style={{ color: 'red' }}>⚠️ {generationError}</p>}
-                                    <label style={{ fontSize: '0.9em', color: '#aaa' }}>Qo'lda Mind Fayl (Agar avto-generatsiya ishlamasa):</label>
+                                    <label style={{ fontSize: '0.9em', color: '#aaa' }}>Qo'lda Mind Fayl (Ixtiyoriy):</label>
                                     <input type="file" accept=".mind" onChange={e => handleFileUpload(e, 'targetFile')} />
-                                    {newGift.targetFile && <p style={{ color: 'lime' }}>✅ Mind Fayl Yuklandi (Avto-Generatsiya aylanib o'tiladi)</p>}
+                                    {newGift.targetFile && <p style={{ color: 'lime' }}>✅ Mind Fayl Yuklandi</p>}
                                 </div>
                             )}
 
@@ -326,15 +332,24 @@ const AdminPanel = () => {
                 {tab === 'settings' && <SettingsPanel />}
             </main>
 
+            {/* List Selection Modal */}
             {selectedGift && (
                 <div className="modal-overlay" onClick={() => setSelectedGift(null)}>
-                    <div className="modal-content" onClick={e => e.stopPropagation()}>
-                        <h2>{selectedGift.pinCode}</h2>
-                        <QRCode value={`${window.location.origin}?id=${selectedGift.pinCode}`} />
+                    <div className="modal-content" onClick={e => e.stopPropagation()} style={{ textAlign: 'center' }}>
+                        <h2>QR Kod</h2>
+                        <div style={{ background: 'white', padding: '20px', borderRadius: '10px', display: 'inline-block', margin: '20px 0' }}>
+                            {/* NOTE: Updated URL format here too */}
+                            <QRCode value={`${window.location.origin}/view?id=${selectedGift._id}`} />
+                        </div>
+                        <h3>PIN: {selectedGift.pinCode}</h3>
+                        <p style={{ color: '#888', fontSize: '12px' }}>ID: {selectedGift._id}</p>
                         <button onClick={() => setSelectedGift(null)} className="nav-btn" style={{ marginTop: '20px' }}>Yopish</button>
                     </div>
                 </div>
             )}
+
+            {/* NEW SUCCESS MODAL */}
+            {renderSuccessModal()}
         </div>
     );
 };
