@@ -1,18 +1,22 @@
 import React, { useEffect, useRef, useState } from 'react';
 import 'mind-ar/dist/mindar-image-aframe.prod.js';
-import { toast } from 'react-hot-toast';
 
 const ARExperience = ({ videoUrl: propVideoUrl, targetFile: propTargetFile }) => {
     const sceneRef = useRef(null);
     const videoRef = useRef(null);
     const [status, setStatus] = useState("Initializing...");
     const [error, setError] = useState(null);
-    const [started, setStarted] = useState(false);
 
-    // Local State for fetchd data
+    // Playback State
+    const [isVideoStarted, setIsVideoStarted] = useState(false);
+
+    // Dimension State
+    const [videoHeight, setVideoHeight] = useState(1); // Default to square, will update on load
+
+    // Local State for fetched data
     const [videoUrl, setVideoUrl] = useState(propVideoUrl);
     const [targetFile, setTargetFile] = useState(propTargetFile);
-    const [isLoadingData, setIsLoadingData] = useState(!propTargetFile); // If props are missing, we are loading
+    const [isLoadingData, setIsLoadingData] = useState(!propTargetFile);
 
     // --- FETCH DATA IF MISSING ---
     useEffect(() => {
@@ -23,7 +27,6 @@ const ARExperience = ({ videoUrl: propVideoUrl, targetFile: propTargetFile }) =>
             return;
         }
 
-        // If no props, look for ID in URL
         const urlParams = new URLSearchParams(window.location.search);
         const id = urlParams.get('id');
 
@@ -39,12 +42,10 @@ const ARExperience = ({ videoUrl: propVideoUrl, targetFile: propTargetFile }) =>
             try {
                 const res = await fetch(`/api/gifts/${id}`);
                 const data = await res.json();
-
                 if (!res.ok) throw new Error(data.error || "Gift not found");
 
                 console.log("✅ Gift Data Loaded:", data);
 
-                // Cloudinary Optimizer (copied from App.jsx)
                 const optimize = (url) => {
                     if (!url || !url.includes('cloudinary.com')) return url;
                     if (url.includes('/upload/')) return url.replace('/upload/', '/upload/f_auto,q_auto/');
@@ -65,7 +66,7 @@ const ARExperience = ({ videoUrl: propVideoUrl, targetFile: propTargetFile }) =>
 
     }, [propTargetFile, propVideoUrl]);
 
-    // --- AR LOGIC ---
+    // --- AR EVENTS ---
     useEffect(() => {
         if (isLoadingData || !targetFile) return;
 
@@ -74,7 +75,6 @@ const ARExperience = ({ videoUrl: propVideoUrl, targetFile: propTargetFile }) =>
         const sceneEl = sceneRef.current;
         if (!sceneEl) return;
 
-        // EVENTS
         const onArReady = () => {
             console.log("✅ AR READY");
             setStatus("Kamera Tayyor");
@@ -86,7 +86,10 @@ const ARExperience = ({ videoUrl: propVideoUrl, targetFile: propTargetFile }) =>
         const onTargetFound = () => {
             console.log("🎯 TARGET FOUND");
             setStatus("Target Topildi!");
-            if (videoRef.current) videoRef.current.play();
+            // Only play if we have already started (user interaction occurred)
+            if (videoRef.current && isVideoStarted) {
+                videoRef.current.play().catch(e => console.warn("Autoplay blocked (retry):", e));
+            }
         };
         const onTargetLost = () => {
             console.log("💨 TARGET LOST");
@@ -99,40 +102,55 @@ const ARExperience = ({ videoUrl: propVideoUrl, targetFile: propTargetFile }) =>
         sceneEl.addEventListener("mindar-image-target-found", onTargetFound);
         sceneEl.addEventListener("mindar-image-target-lost", onTargetLost);
 
-        // Permission Check
-        navigator.mediaDevices.getUserMedia({ video: true })
-            .then(stream => {
-                console.log("✅ Camera Access Granted");
-                stream.getTracks().forEach(t => t.stop());
-            })
-            .catch(err => {
-                console.error("❌ Camera Permission Denied:", err);
-                setError("Kameraga ruxsat berilmadi!");
-            });
-
         return () => {
-            sceneEl.removeEventListener("arReady", onArReady);
-            sceneEl.removeEventListener("arError", onArError);
-            sceneEl.removeEventListener("mindar-image-target-found", onTargetFound);
-            sceneEl.removeEventListener("mindar-image-target-lost", onTargetLost);
+            if (sceneEl) {
+                sceneEl.removeEventListener("arReady", onArReady);
+                sceneEl.removeEventListener("arError", onArError);
+                sceneEl.removeEventListener("mindar-image-target-found", onTargetFound);
+                sceneEl.removeEventListener("mindar-image-target-lost", onTargetLost);
+            }
         };
-    }, [targetFile, isLoadingData]);
+    }, [targetFile, isLoadingData, isVideoStarted]); // Added isVideoStarted dependency
 
-    const handleStart = () => {
+    // --- RATIO CALCULATION ---
+    const handleVideoLoad = (e) => {
+        const v = e.target;
+        if (v.videoWidth && v.videoHeight) {
+            const ratio = v.videoHeight / v.videoWidth;
+            console.log(`📏 Video Loaded. Size: ${v.videoWidth}x${v.videoHeight}. Ratio: ${ratio}`);
+            setVideoHeight(ratio);
+        }
+    };
+
+    // --- START INTERACTION ---
+    const handleStartClick = () => {
         const video = videoRef.current;
         if (video) {
-            video.muted = false;
-            video.play().then(() => {
-                video.pause();
-                video.currentTime = 0;
-                setStarted(true);
-            }).catch(e => setError("Video Play Error: " + e.message));
+            // Unlock audio/video with user gesture
+            video.muted = false; // Unmute
+            video.play()
+                .then(() => {
+                    console.log("▶️ Video started (unlocked). Pausing until target found.");
+                    // We don't pause here if we want to mimic "Tap to View", 
+                    // but usually we wait for target.
+                    // However, for immediate feedback that it works, we can just leave it playing 
+                    // or pause and let targetFound resume it. 
+                    // MindAR usually resumes on target found.
+                    // Let's Pause it so it doesn't play background audio without visual.
+                    video.pause();
+                    video.currentTime = 0;
+                    setIsVideoStarted(true);
+                })
+                .catch(err => {
+                    console.error("❌ Playback failed:", err);
+                    setError("Video xatosi: " + err.message);
+                });
         }
     };
 
     if (isLoadingData) {
         return (
-            <div style={{ width: '100%', height: '100%', background: 'black', color: 'gold', display: 'flex', justifyContent: 'center', alignItems: 'center', flexDirection: 'column' }}>
+            <div className="center-overlay">
                 <div className="loader" style={styles.spinner}></div>
                 <p style={{ marginTop: '20px' }}>Yuklanmoqda...</p>
             </div>
@@ -141,10 +159,10 @@ const ARExperience = ({ videoUrl: propVideoUrl, targetFile: propTargetFile }) =>
 
     if (error) {
         return (
-            <div style={{ width: '100%', height: '100%', background: 'black', color: 'red', display: 'flex', justifyContent: 'center', alignItems: 'center', flexDirection: 'column', textAlign: 'center', padding: '20px' }}>
-                <h2>⚠️ XATOLIK</h2>
+            <div className="center-overlay" style={{ color: 'red' }}>
+                <h3>⚠️ XATOLIK</h3>
                 <p>{error}</p>
-                <button onClick={() => window.location.reload()} style={{ marginTop: '20px', padding: '10px 20px', borderRadius: '10px', border: 'none', cursor: 'pointer' }}>Qayta Yuklash</button>
+                <button onClick={() => window.location.reload()} className="retry-btn">Qayta Yuklash</button>
             </div>
         );
     }
@@ -156,6 +174,15 @@ const ARExperience = ({ videoUrl: propVideoUrl, targetFile: propTargetFile }) =>
                 __html: `
                 video { position: absolute; top:0; left:0; width:100%; height:100%; object-fit:cover; z-index:-2; }
                 .a-canvas { z-index: -1 !important; }
+                .center-overlay {
+                    position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+                    background: rgba(0,0,0,0.85); color: white;
+                    display: flex; flex-direction: column; align-items: center; justify-content: center;
+                    z-index: 2000;
+                }
+                .retry-btn {
+                    margin-top: 20px; padding: 10px 20px; border-radius: 10px; border: none; cursor: pointer;
+                }
             `}} />
 
             {/* STATUS OVERLAY */}
@@ -168,25 +195,32 @@ const ARExperience = ({ videoUrl: propVideoUrl, targetFile: propTargetFile }) =>
                 STATUS: {status}
             </div>
 
-            {/* START SCREEN */}
-            {!started && (
-                <div style={{
-                    position: 'absolute', top: 0, left: 0, width: '100%', height: '100%',
-                    background: 'rgba(0,0,0,0.85)', zIndex: 1000,
-                    display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: 'white'
-                }}>
+            {/* TAP TO START OVERLAY */}
+            {!isVideoStarted && !isLoadingData && (
+                <div className="center-overlay">
                     <img src="/logo.png" style={{ width: '80px', marginBottom: '20px' }} alt="logo" />
-                    <h3>AR KAMERA</h3>
-                    <button onClick={handleStart} style={{
-                        padding: '15px 40px', fontSize: '18px', fontWeight: 'bold',
-                        background: 'gold', border: 'none', borderRadius: '30px', cursor: 'pointer'
-                    }}>
-                        BOSHLASH
+                    <h2 style={{ color: 'gold', marginBottom: '10px' }}>Sovg'ani Ko'rish</h2>
+                    <p style={{ color: '#aaa', marginBottom: '30px' }}>Kamerani rasmga qarating</p>
+
+                    <button
+                        onClick={handleStartClick}
+                        style={{
+                            padding: '18px 50px',
+                            fontSize: '18px',
+                            fontWeight: 'bold',
+                            background: 'gold',
+                            border: 'none',
+                            borderRadius: '30px',
+                            cursor: 'pointer',
+                            boxShadow: '0 0 20px rgba(255, 215, 0, 0.4)'
+                        }}
+                    >
+                        OCHISH
                     </button>
                 </div>
             )}
 
-            {/* SCENE */}
+            {/* AR SCENE */}
             {targetFile && (
                 <a-scene
                     ref={sceneRef}
@@ -198,11 +232,31 @@ const ARExperience = ({ videoUrl: propVideoUrl, targetFile: propTargetFile }) =>
                     style={{ position: 'absolute', top: 0, left: 0, zIndex: -1 }}
                 >
                     <a-assets>
-                        <video ref={videoRef} id="ar-video" src={videoUrl} preload="auto" loop crossOrigin="anonymous" playsInline webkit-playsinline="true"></video>
+                        {/* Modified Video Tag */}
+                        <video
+                            ref={videoRef}
+                            id="gift-video"
+                            src={videoUrl}
+                            onLoadedMetadata={handleVideoLoad} // CALCULATE RATIO
+                            preload="auto"
+                            loop
+                            playsInline
+                            webkit-playsinline="true"
+                            crossOrigin="anonymous"
+                        ></video>
                     </a-assets>
+
                     <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
+
                     <a-entity mindar-image-target="targetIndex: 0">
-                        <a-plane src="#ar-video" position="0 0 0" height="1" width="1" rotation="0 0 0"></a-plane>
+                        {/* Dynamic Height Plane */}
+                        <a-plane
+                            src="#gift-video"
+                            position="0 0 0"
+                            height={videoHeight}
+                            width="1"
+                            rotation="0 0 0"
+                        ></a-plane>
                     </a-entity>
                 </a-scene>
             )}
