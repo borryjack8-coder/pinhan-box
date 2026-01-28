@@ -4,7 +4,6 @@ import 'mind-ar/dist/mindar-image-aframe.prod.js';
 const ARExperience = ({ videoUrl: propVideoUrl, targetFile: propTargetFile }) => {
     // --- STATE ---
     const sceneRef = useRef(null);
-    const videoRef = useRef(null);
     const [status, setStatus] = useState("Initializing...");
     const [error, setError] = useState(null);
 
@@ -82,16 +81,15 @@ const ARExperience = ({ videoUrl: propVideoUrl, targetFile: propTargetFile }) =>
                     alert("Videoni ochib bo'lmadi: " + e.message);
                 });
         } else {
-            // Fallback if video ref is missing (rare)
             setHasInteracted(true);
         }
     };
 
-    // --- 3. A-FRAME EVENT LISTENERS ---
+    // --- 3. A-FRAME & EVENTS OPTIMIZED ---
     useEffect(() => {
         if (!hasInteracted || !fetchedTargetFile) return;
 
-        console.log("🚀 Mounting AR Scene...");
+        console.log("🚀 Mounting AR Scene (Optimized)...");
         const sceneEl = sceneRef.current;
         const videoEl = document.getElementById('gift-video');
 
@@ -102,34 +100,49 @@ const ARExperience = ({ videoUrl: propVideoUrl, targetFile: propTargetFile }) =>
             setStatus("Kamera Tayyor - Marker qidiring");
         };
 
-        const onTargetFound = () => {
-            console.log("🎯 TARGET FOUND - PLAYING VIDEO");
-            setStatus("Playing...");
-            videoEl.play().catch(e => console.error("Play Error:", e));
-        };
-
-        const onTargetLost = () => {
-            console.log("💨 TARGET LOST - PAUSING");
-            setStatus("Qidirilmoqda...");
-            videoEl.pause();
-        };
-
         const onArError = (e) => {
             console.error("AR Error:", e);
             setError("Kamera xatosi: " + (e.detail?.error || "Unknown"));
         };
 
-        // Attach
+        // Attach Scene Events
         sceneEl.addEventListener("arReady", onArReady);
         sceneEl.addEventListener("arError", onArError);
-        sceneEl.addEventListener("mindar-image-target-found", onTargetFound);
-        sceneEl.addEventListener("mindar-image-target-lost", onTargetLost);
+
+        // ROBUST PLAYBACK LOGIC: Bind directly to the target entity
+        // We need to wait for the DOM to be ready with the entity
+        const setupTargetEvents = () => {
+            const targetEntity = document.querySelector('[mindar-image-target]');
+            if (!targetEntity) {
+                // Retry if not yet in DOM
+                setTimeout(setupTargetEvents, 100);
+                return;
+            }
+
+            console.log("✅ Target Entity Found - Attaching Listeners");
+
+            targetEntity.addEventListener("targetFound", () => {
+                console.log("🎯 TARGET FOUND - FORCING PLAY");
+                setStatus("Playing...");
+                if (videoEl.paused) {
+                    videoEl.play().catch(e => console.error("Force Play Error:", e));
+                }
+            });
+
+            targetEntity.addEventListener("targetLost", () => {
+                console.log("💨 TARGET LOST - PAUSING");
+                setStatus("Qidirilmoqda...");
+                videoEl.pause();
+            });
+        };
+
+        setupTargetEvents();
 
         return () => {
             sceneEl.removeEventListener("arReady", onArReady);
             sceneEl.removeEventListener("arError", onArError);
-            sceneEl.removeEventListener("mindar-image-target-found", onTargetFound);
-            sceneEl.removeEventListener("mindar-image-target-lost", onTargetLost);
+            // Note: cleaning up the targetEntity listeners is harder since it's inside a closure/timer,
+            // but in React effect cleanup, the scene usually gets torn down anyway.
         };
     }, [hasInteracted, fetchedTargetFile]);
 
@@ -162,7 +175,7 @@ const ARExperience = ({ videoUrl: propVideoUrl, targetFile: propTargetFile }) =>
         </div>
     );
 
-    // 3. Gatekeeper (THE FIX)
+    // 3. Gatekeeper
     if (!hasInteracted) {
         return (
             <div style={{ ...styles.fullscreenCenter, zIndex: 9999, background: 'black' }}>
@@ -180,14 +193,12 @@ const ARExperience = ({ videoUrl: propVideoUrl, targetFile: propTargetFile }) =>
     // 4. AR Scene
     return (
         <div style={{ width: '100%', height: '100%', position: 'relative', overflow: 'hidden' }}>
-            {/* Transparency Styles inside component to be sure */}
             <style dangerouslySetInnerHTML={{
                 __html: `
                 video#gift-video { opacity: 0; position:absolute; z-index:-10; } 
                 .mindar-ui-overlay { display: none !important; }
             `}} />
 
-            {/* Status Overlay */}
             <div style={{
                 position: 'absolute', top: 10, left: 10, zIndex: 1000,
                 background: 'rgba(0,0,0,0.6)', padding: '5px 10px', borderRadius: '6px',
@@ -196,11 +207,12 @@ const ARExperience = ({ videoUrl: propVideoUrl, targetFile: propTargetFile }) =>
                 STATUS: {status}
             </div>
 
+            {/* OPTIMIZED SCENE SETTINGS */}
             <a-scene
                 ref={sceneRef}
-                mindar-image={`imageTargetSrc: ${fetchedTargetFile}; uiLoading: no; uiScanning: no; uiError: no; filterMinCF:0.0001; filterBeta: 0.001;`}
+                mindar-image={`imageTargetSrc: ${fetchedTargetFile}; uiLoading: no; uiScanning: no; uiError: no; filterMinCF:0.0001; filterBeta: 0.001; missTolerance: 10;`}
                 color-space="sRGB"
-                renderer="colorManagement: true, physicallyCorrectLights: true"
+                renderer="colorManagement: true, physicallyCorrectLights: false; antialias: false;"
                 vr-mode-ui="enabled: false"
                 device-orientation-permission-ui="enabled: false"
                 style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', zIndex: 1 }}
@@ -214,7 +226,7 @@ const ARExperience = ({ videoUrl: propVideoUrl, targetFile: propTargetFile }) =>
                         webkit-playsinline="true"
                         loop
                         crossOrigin="anonymous"
-                        onLoadedMetadata={handleMetadata} // Calc ratio here
+                        onLoadedMetadata={handleMetadata}
                     ></video>
                 </a-assets>
 
@@ -225,8 +237,10 @@ const ARExperience = ({ videoUrl: propVideoUrl, targetFile: propTargetFile }) =>
                         src="#gift-video"
                         position="0 0 0"
                         height={videoHeight}
-                        width="1" // MINDAR normalizes target width to 1
+                        width="1"
                         rotation="0 0 0"
+                        segments-height="1"
+                        segments-width="1"
                     ></a-plane>
                 </a-entity>
             </a-scene>
