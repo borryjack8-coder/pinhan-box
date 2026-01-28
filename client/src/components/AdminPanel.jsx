@@ -12,10 +12,18 @@ const AdminPanel = () => {
     const [isLoggedIn, setIsLoggedIn] = useState(false);
     const [isUploading, setIsUploading] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
-    const [newGift, setNewGift] = useState({ clientName: '', videoUrl: '', targetFile: '', thumbnailUrl: '', pinCode: '' });
-    const [selectedGift, setSelectedGift] = useState(null);
     const [isGenerating, setIsGenerating] = useState(false);
     const [generationError, setGenerationError] = useState(null);
+    const [selectedGift, setSelectedGift] = useState(null);
+
+    // CHANGED: Renamed thumbnailUrl -> markerUrl for consistency
+    const [newGift, setNewGift] = useState({
+        clientName: '',
+        videoUrl: '',
+        targetFile: '',
+        markerUrl: '', // previously thumbnailUrl
+        pinCode: ''
+    });
 
     // --- AUTH ---
     const checkAuth = async (pass) => {
@@ -94,14 +102,21 @@ const AdminPanel = () => {
 
             if (!res.ok) {
                 alert(`Yuklash xatosi: ${data.message || data.error}`);
-                console.error("Upload Failed:", data);
                 return;
             }
 
-            console.log("✅ Upload Response:", data);
+            console.log(`✅ Upload Success (${type}):`, data);
 
-            if (data.mindUrl) setNewGift(prev => ({ ...prev, targetFile: data.mindUrl }));
-            else if (data.url) setNewGift(prev => ({ ...prev, [type]: data.url }));
+            // Map the response URL to the correct state property
+            // Note: server returns { url: "..." } or { mindUrl: "..." }
+
+            if (type === 'targetFile') {
+                // Manual Mind File
+                setNewGift(prev => ({ ...prev, targetFile: data.mindUrl || data.url }));
+            } else {
+                // Video or Marker
+                setNewGift(prev => ({ ...prev, [type]: data.url }));
+            }
 
         } catch (err) {
             alert("Network Error during upload: " + err.message);
@@ -112,16 +127,19 @@ const AdminPanel = () => {
 
     // --- CREATE GIFT ---
     const handleCreate = async () => {
-        console.log("🛠️ Starting Gift Creation Process...");
+        console.log("🛠️ Starting Gift Creation. Current State:", newGift);
 
-        // Validation
+        // 1. Validation
         if (!newGift.clientName) return alert("Iltimos, Mijoz ismini kiriting");
         if (!newGift.videoUrl) return alert("Video faylni yuklang");
-        if (!newGift.thumbnailUrl) return alert("Marker rasmini yuklang");
+        if (!newGift.markerUrl) return alert("Marker rasmini yuklang");
 
+        // 2. Logic Split: Manual Mind File vs Auto-Generate
         if (newGift.targetFile) {
+            console.log("⏩ Manual Mind File detected. Skipping generation.");
             await submitGift(newGift);
         } else {
+            console.log("⚙️ No Mind File. Starting Auto-Generation using markerUrl...");
             await generateAndSubmit();
         }
     };
@@ -130,10 +148,11 @@ const AdminPanel = () => {
         setIsGenerating(true);
         try {
             const token = localStorage.getItem('admin_token');
-            console.log("⚙️ Requesting Mind Generation for:", newGift.thumbnailUrl);
 
-            // Access property safely
-            const payload = { imageUrl: newGift.thumbnailUrl };
+            // CRITICAL: Map markerUrl to imageUrl for the backend
+            const generationPayload = { imageUrl: newGift.markerUrl };
+
+            console.log("⚙️ Calling /generate-mind with:", generationPayload);
 
             const res = await fetch('/api/admin/generate-mind', {
                 method: 'POST',
@@ -141,20 +160,25 @@ const AdminPanel = () => {
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${token}`
                 },
-                body: JSON.stringify(payload)
+                body: JSON.stringify(generationPayload)
             });
 
             const data = await res.json();
             if (!res.ok) throw new Error(data.message || 'Generation Failed');
 
-            console.log("✅ Mind Generated:", data.mindUrl);
+            console.log("✅ Mind Generated Successfully:", data.mindUrl);
 
             const readyGift = { ...newGift, targetFile: data.mindUrl };
+
+            // Update UI State for clarity
             setNewGift(readyGift);
+
+            // Submit immediately
             await submitGift(readyGift);
 
         } catch (err) {
-            alert("Generatsiya Xatosi: " + err.message);
+            console.error("Generatsiya Xatosi:", err);
+            alert("Generatsiya Xatosi: " + err.message + "\n\nIltimos, .mind fayl yuklab ko'ring.");
             setGenerationError(err.message);
         } finally {
             setIsGenerating(false);
@@ -163,9 +187,24 @@ const AdminPanel = () => {
 
     const submitGift = async (giftPayload) => {
         const token = localStorage.getItem('admin_token');
-        if (!giftPayload.pinCode) giftPayload.pinCode = Math.floor(1000 + Math.random() * 9000).toString();
 
-        console.log("🎁 Submitting Gift Payload:", giftPayload);
+        // Auto-Generate PIN if missing
+        if (!giftPayload.pinCode) {
+            giftPayload.pinCode = Math.floor(1000 + Math.random() * 9000).toString();
+        }
+
+        // Ensure thumbnailUrl is populated for DB (map back from markerUrl if needed by Schema)
+        // Assuming DB schema has `thumbnailUrl`, we should send it.
+        // If DB has `markerUrl`, fine. But let's send both or ensure mapping.
+        // server.js uses `req.body` directly.
+        // Let's ensure we match what server/schema likely wants. 
+        // If previously it was thumbnailUrl, let's include it.
+        const finalPayload = {
+            ...giftPayload,
+            thumbnailUrl: giftPayload.markerUrl // Map markerUrl -> thumbnailUrl for DB compatibility
+        };
+
+        console.log("🎁 Submitting Final Payload:", finalPayload);
 
         try {
             const res = await fetch('/api/admin/gifts', {
@@ -174,33 +213,29 @@ const AdminPanel = () => {
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${token}`
                 },
-                body: JSON.stringify(giftPayload)
+                body: JSON.stringify(finalPayload)
             });
 
             const data = await res.json();
 
             if (!res.ok) {
-                alert(`XATOLIK (${res.status}): ${data.message || data.error}`);
-                console.error("Create Gift Failed:", data);
+                alert(`SERVER XATOSI: ${data.message || data.error}`);
                 return;
             }
 
-            // SUCCESS HANDLING - FIX: USE CORRECT VARIABLES
-            console.log("✅ Gift Created Success:", data);
+            // SUCCESS
+            const createdGift = data.gift || data;
+            alert(`✅ SOVG'A YARATILDI!\n\nMijoz: ${createdGift.clientName}\nPIN: ${createdGift.pinCode}`);
 
-            // Allow for data.gift wrapper OR direct data object
-            const giftObj = data.gift || data;
-            const name = giftObj.clientName || "Unknown Client";
+            // Reset Form (using markerUrl)
+            setNewGift({ clientName: '', videoUrl: '', targetFile: '', markerUrl: '', pinCode: '' });
+            setGenerationError(null);
 
-            alert(`✅ Gift Created Successfully!\nClient: ${name}\nPIN: ${giftObj.pinCode}`);
-
-            setNewGift({ clientName: '', videoUrl: '', targetFile: '', thumbnailUrl: '', pinCode: '' });
             fetchData();
             setTab('list');
 
         } catch (err) {
-            alert("Tarmoq xatosi: " + err.message);
-            console.error("Network Error:", err);
+            alert("TARMOQ XATOSI: " + err.message);
         }
     };
 
@@ -210,6 +245,7 @@ const AdminPanel = () => {
         await fetch(`/api/admin/gifts/${id}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` } });
         fetchData();
     };
+
 
     if (!isLoggedIn) {
         return (
@@ -243,32 +279,46 @@ const AdminPanel = () => {
                     <div style={{ padding: '20px' }}>
                         <div className="glass" style={{ padding: '30px', maxWidth: '600px' }}>
                             <h3>Yangi Sovg'a Yaratish</h3>
+
                             <div className="form-group">
                                 <label>Mijoz Ismi:</label>
-                                <input value={newGift.clientName} onChange={e => setNewGift({ ...newGift, clientName: e.target.value })} />
+                                <input value={newGift.clientName} onChange={e => setNewGift({ ...newGift, clientName: e.target.value })} placeholder="Ism Familya" />
                             </div>
+
                             <div className="form-group">
                                 <label>PIN (Ixtiyoriy):</label>
-                                <input value={newGift.pinCode} onChange={e => setNewGift({ ...newGift, pinCode: e.target.value })} />
+                                <input value={newGift.pinCode} onChange={e => setNewGift({ ...newGift, pinCode: e.target.value })} placeholder="1234" />
                             </div>
+
                             <hr style={{ margin: '20px 0', borderColor: '#444' }} />
+
                             <div className="form-group">
                                 <label>1. Video (.mp4) {newGift.videoUrl && '✅'}</label>
-                                <input type="file" onChange={e => handleFileUpload(e, 'videoUrl')} />
+                                <input type="file" accept="video/mp4,video/webm" onChange={e => handleFileUpload(e, 'videoUrl')} />
                             </div>
+
                             <div className="form-group">
-                                <label>2. Rasm (.jpg) {newGift.thumbnailUrl && '✅'}</label>
-                                <input type="file" accept="image/*" onChange={e => handleFileUpload(e, 'thumbnailUrl')} />
+                                <label>2. Marker Rasmi (.jpg/.png) {newGift.markerUrl && '✅'}</label>
+                                <input type="file" accept="image/*" onChange={e => handleFileUpload(e, 'markerUrl')} />
                             </div>
-                            {generationError && (
-                                <div style={{ color: 'red', border: '1px solid red', padding: '10px', borderRadius: '5px' }}>
-                                    <p>Avto-generatsiya xatosi: {generationError}</p>
-                                    <label>Qo'lda Mind Fayl Yuklash:</label>
+
+                            {/* ERROR / MANUAL OVERRIDE SECTION */}
+                            {(generationError || !isGenerating) && (
+                                <div style={{ marginTop: '20px', padding: '15px', border: '1px dashed #555', borderRadius: '8px' }}>
+                                    {generationError && <p style={{ color: 'red' }}>⚠️ {generationError}</p>}
+                                    <label style={{ fontSize: '0.9em', color: '#aaa' }}>Qo'lda Mind Fayl (Agar avto-generatsiya ishlamasa):</label>
                                     <input type="file" accept=".mind" onChange={e => handleFileUpload(e, 'targetFile')} />
+                                    {newGift.targetFile && <p style={{ color: 'lime' }}>✅ Mind Fayl Yuklandi (Avto-Generatsiya aylanib o'tiladi)</p>}
                                 </div>
                             )}
-                            <button onClick={handleCreate} disabled={isUploading || isGenerating} className="btn-primary" style={{ width: '100%', marginTop: '20px' }}>
-                                {isUploading ? 'YUKLANMOQDA...' : isGenerating ? 'GENERATSIYA...' : 'YARATISH'}
+
+                            <button
+                                onClick={handleCreate}
+                                disabled={isUploading || isGenerating}
+                                className="btn-primary"
+                                style={{ width: '100%', marginTop: '20px', padding: '15px', fontSize: '1.1em' }}
+                            >
+                                {isUploading ? 'YUKLANMOQDA...' : isGenerating ? 'GENERATSIYA QILINMOQDA...' : 'SAQLASH VA YARATISH'}
                             </button>
                         </div>
                     </div>
