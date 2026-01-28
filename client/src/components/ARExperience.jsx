@@ -150,7 +150,7 @@ const ARExperience = ({ videoUrl: propVideoUrl, targetFile: propTargetFile }) =>
     }
 
     return (
-        <div style={{ width: '100%', height: '100%', position: 'relative', background: 'black' }}>
+        <div style={{ width: '100%', height: '100%', position: 'relative', background: 'transparent' }}>
 
             <style dangerouslySetInnerHTML={{
                 __html: `

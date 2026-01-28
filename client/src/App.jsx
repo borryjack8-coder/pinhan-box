@@ -90,11 +90,10 @@ function App() {
 
     // AR VIEW
     // If step is AR, we render ARExperience.
-    // Logic: If giftData exists, pass it (Legacy/PIN flow).
     // If giftData is null (View flow), pass null, and ARExperience will fetch from URL.
     if (step === 'ar') {
         return (
-            <div style={{ width: '100vw', height: '100vh', background: 'black' }}>
+            <div style={{ width: '100vw', height: '100vh', background: 'transparent' }}>
                 <ARExperience
                     videoUrl={giftData ? optimizeUrl(giftData.videoUrl) : null}
                     targetFile={giftData ? giftData.targetFile : null}
