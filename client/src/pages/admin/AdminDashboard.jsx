@@ -6,7 +6,6 @@ import toast, { Toaster } from 'react-hot-toast';
 const AdminDashboard = () => {
     const navigate = useNavigate();
     const [shops, setShops] = useState([]);
-    const [stats, setStats] = useState({});
 
     // Modal State
     const [showCreditModal, setShowCreditModal] = useState(false);
@@ -26,9 +25,12 @@ const AdminDashboard = () => {
         try {
             const res = await axios.get('/api/admin/shops', { headers: { Authorization: `Bearer ${token}` } });
             setShops(res.data);
-            // Basic stats could be derived or fetched separately
         } catch (err) {
             console.error(err);
+            if (err.response?.status === 401) {
+                localStorage.clear();
+                navigate('/login');
+            }
         }
     };
 
@@ -38,11 +40,11 @@ const AdminDashboard = () => {
             await axios.post(`/api/admin/shops/${selectedShop._id}/credit`, { amount: creditAmount }, {
                 headers: { Authorization: `Bearer ${token}` }
             });
-            toast.success("Mablag' qo'shildi");
+            toast.success(`${creditAmount} CR qo'shildi!`);
             setShowCreditModal(false);
             fetchData();
         } catch (err) {
-            toast.error("Xatolik");
+            toast.error("Xatolik yuz berdi");
         }
     };
 
@@ -52,7 +54,7 @@ const AdminDashboard = () => {
             await axios.post('/api/admin/shops', newShop, {
                 headers: { Authorization: `Bearer ${token}` }
             });
-            toast.success("Do'kon yaratildi");
+            toast.success("Do'kon muvaffaqiyatli yaratildi");
             setShowCreateShop(false);
             setNewShop({ username: '', password: '', shopName: '' });
             fetchData();
@@ -63,52 +65,60 @@ const AdminDashboard = () => {
 
     return (
         <div className="min-h-screen bg-zinc-900 text-white p-6">
-            <Toaster />
+            <Toaster position="top-right" />
 
+            {/* HEADER */}
             <header className="flex justify-between items-center mb-8 pb-4 border-b border-zinc-800">
-                <h1 className="text-2xl font-bold text-pinhan-gold">SUPER ADMIN</h1>
-                <button onClick={() => { localStorage.clear(); navigate('/login'); }} className="bg-red-900/30 text-red-400 px-4 py-2 rounded">Chiqish</button>
+                <h1 className="text-2xl font-bold text-pinhan-gold uppercase tracking-wider">Do'konlar Boshqaruvi</h1>
+                <button
+                    onClick={() => { localStorage.clear(); navigate('/login'); }}
+                    className="text-xs text-red-400 hover:text-red-300 transition-colors"
+                >
+                    CHIQISH
+                </button>
             </header>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-                {/* STATS CARD */}
-                <div className="bg-black p-6 rounded-2xl border border-zinc-800">
-                    <h3 className="text-zinc-500 text-sm mb-2">JAMI DO'KONLAR</h3>
-                    <p className="text-4xl font-bold">{shops.length}</p>
-                </div>
-                <div
+            {/* TOP ACTION */}
+            <div className="mb-8">
+                <button
                     onClick={() => setShowCreateShop(true)}
-                    className="bg-pinhan-gold text-black p-6 rounded-2xl cursor-pointer hover:bg-yellow-500 transition-colors flex items-center justify-center font-bold text-xl"
+                    className="bg-pinhan-gold hover:bg-yellow-500 text-black font-bold py-4 px-8 rounded-xl shadow-lg transition-all transform hover:scale-[1.02] flex items-center gap-2"
                 >
-                    + YANGI DO'KON
-                </div>
+                    <span className="text-xl">+</span> Yangi Do'kon Qo'shish
+                </button>
             </div>
 
-            <h2 className="text-xl font-bold mb-4">Mijozlar Ro'yxati</h2>
-            <div className="bg-black rounded-2xl overflow-hidden border border-zinc-800">
+            {/* MAIN TABLE */}
+            <div className="bg-black rounded-2xl overflow-hidden border border-zinc-800 shadow-xl">
                 <table className="w-full text-left">
-                    <thead className="bg-zinc-900 text-zinc-500 text-xs uppercase">
+                    <thead className="bg-zinc-900 text-zinc-500 text-xs uppercase tracking-wider">
                         <tr>
-                            <th className="p-4">Do'kon Nomi</th>
-                            <th className="p-4">Username</th>
-                            <th className="p-4">Balans</th>
-                            <th className="p-4">Amallar</th>
+                            <th className="p-5 font-medium">Do'kon Nomi</th>
+                            <th className="p-5 font-medium">Login</th>
+                            <th className="p-5 font-medium">Hozirgi Balans (Credits)</th>
+                            <th className="p-5 font-medium">Harakat</th>
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-zinc-800">
-                        {shops.map(shop => (
-                            <tr key={shop._id} className="hover:bg-zinc-900/50">
-                                <td className="p-4 font-bold">{shop.shopName}</td>
-                                <td className="p-4 text-zinc-400">{shop.username}</td>
-                                <td className={`p-4 font-mono font-bold ${shop.balance < 5 ? 'text-red-500' : 'text-green-400'}`}>
-                                    {shop.balance} CR
+                        {shops.length === 0 ? (
+                            <tr>
+                                <td colSpan="4" className="p-8 text-center text-zinc-500">Hozircha do'konlar yo'q.</td>
+                            </tr>
+                        ) : shops.map(shop => (
+                            <tr key={shop._id} className="hover:bg-zinc-900/40 transition-colors group">
+                                <td className="p-5 font-bold text-white text-lg">{shop.shopName}</td>
+                                <td className="p-5 text-zinc-400 font-mono">{shop.username}</td>
+                                <td className="p-5">
+                                    <span className={`inline-block px-3 py-1 rounded-md font-mono font-bold ${shop.balance < 5 ? 'bg-red-900/30 text-red-500' : 'bg-green-900/30 text-green-400'}`}>
+                                        {shop.balance} CR
+                                    </span>
                                 </td>
-                                <td className="p-4">
+                                <td className="p-5">
                                     <button
                                         onClick={() => { setSelectedShop(shop); setShowCreditModal(true); }}
-                                        className="bg-zinc-800 hover:bg-zinc-700 text-white px-3 py-1 rounded text-sm"
+                                        className="bg-green-600 hover:bg-green-500 text-white px-4 py-2 rounded-lg font-bold text-sm shadow transition-all hover:shadow-green-900/50 flex items-center gap-2"
                                     >
-                                        + Credit
+                                        [+] Limit Qo'shish
                                     </button>
                                 </td>
                             </tr>
@@ -119,56 +129,85 @@ const AdminDashboard = () => {
 
             {/* MODAL: ADD CREDIT */}
             {showCreditModal && (
-                <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-4">
-                    <div className="bg-zinc-900 p-6 rounded-2xl w-full max-w-sm">
-                        <h3 className="text-lg font-bold mb-4">Balans to'ldirish: {selectedShop?.shopName}</h3>
+                <div className="fixed inset-0 bg-black/90 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fade-in">
+                    <div className="bg-zinc-900 p-8 rounded-2xl w-full max-w-sm border border-zinc-700 shadow-2xl">
+                        <h3 className="text-xl font-bold mb-2 text-white">Balans To'ldirish</h3>
+                        <p className="text-zinc-500 mb-6">Do'kon: <span className="text-pinhan-gold">{selectedShop?.shopName}</span></p>
+
                         <div className="flex gap-2 mb-4">
                             {[10, 50, 100].map(amt => (
                                 <button key={amt} onClick={() => setCreditAmount(amt)}
-                                    className={`flex-1 py-2 rounded ${creditAmount === amt ? 'bg-pinhan-gold text-black' : 'bg-zinc-800'}`}>
+                                    className={`flex-1 py-3 rounded-lg font-bold border transition-colors ${creditAmount === amt ? 'bg-pinhan-gold text-black border-pinhan-gold' : 'bg-transparent border-zinc-700 hover:border-zinc-500'}`}>
                                     +{amt}
                                 </button>
                             ))}
                         </div>
-                        <input
-                            type="number"
-                            value={creditAmount}
-                            onChange={e => setCreditAmount(e.target.value)}
-                            className="w-full bg-black p-3 rounded mb-4 text-center text-xl font-bold"
-                        />
-                        <button onClick={handleAddCredit} className="w-full bg-green-600 py-3 rounded font-bold mb-2">TOSHIROQ</button>
-                        <button onClick={() => setShowCreditModal(false)} className="w-full bg-zinc-800 py-3 rounded">Yopish</button>
+
+                        <div className="mb-6">
+                            <label className="text-xs text-zinc-500 mb-1 block">Yoki qo'lda kiriting:</label>
+                            <input
+                                type="number"
+                                value={creditAmount}
+                                onChange={e => setCreditAmount(e.target.value)}
+                                className="w-full bg-black p-4 rounded-lg text-center text-2xl font-bold text-white border border-zinc-700 focus:border-pinhan-gold outline-none"
+                            />
+                        </div>
+
+                        <button onClick={handleAddCredit} className="w-full bg-green-600 hover:bg-green-500 text-white py-4 rounded-xl font-bold mb-3 transition-colors shadow-lg shadow-green-900/20">
+                            TASDIQLASH (+{creditAmount})
+                        </button>
+                        <button onClick={() => setShowCreditModal(false)} className="w-full bg-transparent hover:bg-zinc-800 text-zinc-400 py-3 rounded-xl transition-colors">
+                            Bekor qilish
+                        </button>
                     </div>
                 </div>
             )}
 
             {/* MODAL: CREATE SHOP */}
             {showCreateShop && (
-                <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-4">
-                    <div className="bg-zinc-900 p-6 rounded-2xl w-full max-w-md">
-                        <h3 className="text-lg font-bold mb-4">Yangi Do'kon Qo'shish</h3>
-                        <div className="space-y-4 mb-6">
-                            <input
-                                placeholder="Do'kon Nomi (Brand)"
-                                className="w-full bg-black p-3 rounded border border-zinc-700"
-                                value={newShop.shopName}
-                                onChange={e => setNewShop({ ...newShop, shopName: e.target.value })}
-                            />
-                            <input
-                                placeholder="Username (Login)"
-                                className="w-full bg-black p-3 rounded border border-zinc-700"
-                                value={newShop.username}
-                                onChange={e => setNewShop({ ...newShop, username: e.target.value })}
-                            />
-                            <input
-                                placeholder="Parol"
-                                className="w-full bg-black p-3 rounded border border-zinc-700"
-                                value={newShop.password}
-                                onChange={e => setNewShop({ ...newShop, password: e.target.value })}
-                            />
+                <div className="fixed inset-0 bg-black/90 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fade-in">
+                    <div className="bg-zinc-900 p-8 rounded-2xl w-full max-w-md border border-zinc-700 shadow-2xl">
+                        <h3 className="text-xl font-bold mb-6 text-white border-b border-zinc-800 pb-4">Yangi Do'kon Ro'yxatdan O'tkazish</h3>
+
+                        <div className="space-y-4 mb-8">
+                            <div>
+                                <label className="block text-xs text-zinc-500 mb-1">Do'kon Nomi (Brand)</label>
+                                <input
+                                    className="w-full bg-black p-4 rounded-xl border border-zinc-700 text-white focus:border-pinhan-gold outline-none"
+                                    placeholder="Masalan: Flower Shop Tashkent"
+                                    value={newShop.shopName}
+                                    onChange={e => setNewShop({ ...newShop, shopName: e.target.value })}
+                                />
+                            </div>
+
+                            <div>
+                                <label className="block text-xs text-zinc-500 mb-1">Login (Username)</label>
+                                <input
+                                    className="w-full bg-black p-4 rounded-xl border border-zinc-700 text-white focus:border-pinhan-gold outline-none"
+                                    placeholder="login_name"
+                                    value={newShop.username}
+                                    onChange={e => setNewShop({ ...newShop, username: e.target.value })}
+                                />
+                            </div>
+
+                            <div>
+                                <label className="block text-xs text-zinc-500 mb-1">Parol</label>
+                                <input
+                                    className="w-full bg-black p-4 rounded-xl border border-zinc-700 text-white focus:border-pinhan-gold outline-none"
+                                    placeholder="••••••••"
+                                    type="password"
+                                    value={newShop.password}
+                                    onChange={e => setNewShop({ ...newShop, password: e.target.value })}
+                                />
+                            </div>
                         </div>
-                        <button onClick={handleCreateShop} className="w-full bg-pinhan-gold text-black py-3 rounded font-bold mb-2">SAQLASH</button>
-                        <button onClick={() => setShowCreateShop(false)} className="w-full bg-zinc-800 py-3 rounded">Yopish</button>
+
+                        <button onClick={handleCreateShop} className="w-full bg-pinhan-gold hover:bg-yellow-500 text-black py-4 rounded-xl font-bold mb-3 transition-colors shadow-lg shadow-yellow-900/20">
+                            SAQLASH VA YARATISH
+                        </button>
+                        <button onClick={() => setShowCreateShop(false)} className="w-full bg-transparent hover:bg-zinc-800 text-zinc-400 py-3 rounded-xl transition-colors">
+                            Bekor qilish
+                        </button>
                     </div>
                 </div>
             )}
