@@ -11,8 +11,14 @@ const giftSchema = new mongoose.Schema({
     },
 
     // AR Content
-    videoUrl: { type: String, required: true },
-    targetFile: { type: String, required: true }, // .mind file url
+    videoUrl: {
+        type: String,
+        required: true
+    },
+    targetFile: {
+        type: String,
+        required: true
+    }, // .mind file url
 
     // SaaS / Multi-tenant Link
     userId: {
@@ -20,11 +26,14 @@ const giftSchema = new mongoose.Schema({
         ref: 'User',
         required: true
     },
-    shopName: { type: String }, // Optional denormalization
+    shopName: {
+        type: String
+    }, // Optional denormalization
 
     // Optional Metadata
-    clientName: { type: String },
-    createdAt: { type: Date, default: Date.now },
+    clientName: {
+        type: String
+    },
 
     // --- SECURITY: Device Locking ---
     boundDeviceId: {
@@ -41,7 +50,8 @@ const giftSchema = new mongoose.Schema({
         type: String, // Cloudinary URL for the marker image
         default: null
     }
-}
+}, {
+    timestamps: true
 });
 
 // Scalability Index: Faster queries for shops with many gifts
