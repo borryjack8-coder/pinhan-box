@@ -216,6 +216,15 @@ app.post('/api/shop/generate-mind', auth(['admin', 'shop']), async (req, res) =>
     try {
         console.log("--- START: Generate Mind Process ---");
 
+        // 1. Request & Auth Debug
+        console.log("1. Request received");
+        console.log("2. User from Request:", req.user ? `${req.user.username} (${req.user._id})` : "UNDEFINED");
+
+        // 2. Explicit Auth Check
+        if (!req.user || !req.user._id) {
+            console.error("AUTH ERROR: User not found in request (Middleware failed).");
+            return res.status(401).json({ message: "AUTH ERROR: User not found in request. Middleware failed." });
+        }
         // 0. FAIL FAST: Check Environment
         if (!process.env.CLOUDINARY_CLOUD_NAME) {
             console.error("FATAL: Cloudinary Config Missing in Render Environment!");
@@ -284,6 +293,16 @@ app.post('/api/shop/generate-mind', auth(['admin', 'shop']), async (req, res) =>
 
 // CREATE GIFT (THE TRANSACTION)
 app.post('/api/shop/gifts', auth(['admin', 'shop']), async (req, res) => {
+
+    console.log("--- START: Create Gift Transaction ---");
+    console.log("1. Request received");
+    console.log("2. User from Request:", req.user ? `${req.user.username} (${req.user._id})` : "UNDEFINED");
+
+    // Explicit Auth Check
+    if (!req.user || !req.user._id) {
+        return res.status(401).json({ message: "AUTH ERROR: User not found in request. Middleware failed." });
+    }
+
     const session = await mongoose.startSession();
     session.startTransaction();
     try {
@@ -328,8 +347,16 @@ app.post('/api/shop/gifts', auth(['admin', 'shop']), async (req, res) => {
     } catch (err) {
         await session.abortTransaction();
         session.endSession();
-        console.error("Transaction Error:", err);
-        res.status(400).json({ error: err.message });
+        console.error("CRITICAL SERVER ERROR (Create Gift):", err);
+
+        if (err.name === 'ValidationError') {
+            return res.status(400).json({ message: "DB VALIDATION: " + err.message });
+        }
+
+        res.status(500).json({
+            message: "SERVER ERROR: " + err.message,
+            stack: process.env.NODE_ENV === 'development' ? err.stack : undefined
+        });
     }
 });
 
