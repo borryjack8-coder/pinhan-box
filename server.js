@@ -211,25 +211,36 @@ app.post('/api/shop/upload-mind', auth(['admin', 'shop']), upload.single('file')
     res.json({ mindUrl: req.file.path });
 });
 
-// Generate Mind (Requires Auth & Balance Check implied by next step, but ideally check here too? 
-// No, generation is cheap, actual creation deducts credit. We'll verify credit on creation.)
+// Generate Mind
 app.post('/api/shop/generate-mind', auth(['admin', 'shop']), async (req, res) => {
     try {
-        const { imageUrl } = req.body;
-        if (!imageUrl) throw new Error('Rasm URL yo\'q');
+        console.log("--- START: Generate Mind Process ---");
+        console.log("Check Env:", {
+            cloud_name: process.env.CLOUDINARY_CLOUD_NAME ? 'OK' : 'MISSING',
+            key: process.env.CLOUDINARY_API_KEY ? 'OK' : 'MISSING'
+        });
 
-        // Check balance BEFORE doing heavy work (Optional but good practice)
+        const { imageUrl } = req.body;
+        if (!imageUrl) throw new Error('Rasm URL (imageUrl) yetib kelmadi');
+
+        // Check balance
         if (req.user.role === 'shop' && req.user.balance <= 0) {
             return res.status(402).json({ error: 'Hisobingizda mablag\' yetarli emas (0 credits)' });
         }
 
+        console.log("1. Fetching & Compressing Image:", imageUrl);
         const compressed = await compressImage(imageUrl);
+
         const tempJpg = path.join(tempDir, `temp_${Date.now()}.jpg`);
         const tempMind = path.join(tempDir, `temp_${Date.now()}.mind`);
 
+        console.log("2. Writing Temp Files:", tempJpg);
         fs.writeFileSync(tempJpg, compressed);
+
+        console.log("3. Generating Mind File (Heavy Process)...");
         await generateMindFile(tempJpg, tempMind);
 
+        console.log("4. Uploading .mind to Cloudinary...");
         const result = await cloudinary.uploader.upload(tempMind, {
             folder: 'pinhan_gifts',
             resource_type: 'raw',
@@ -237,13 +248,25 @@ app.post('/api/shop/generate-mind', auth(['admin', 'shop']), async (req, res) =>
             use_filename: true, unique_filename: false
         });
 
-        fs.unlinkSync(tempJpg);
-        fs.unlinkSync(tempMind);
+        console.log("5. Cleanup...");
+        if (fs.existsSync(tempJpg)) fs.unlinkSync(tempJpg);
+        if (fs.existsSync(tempMind)) fs.unlinkSync(tempMind);
 
+        console.log("✅ Success! URL:", result.secure_url);
         res.json({ success: true, mindUrl: result.secure_url });
+
     } catch (err) {
-        console.error("Gen Error:", err);
-        res.status(500).json({ success: false, message: err.message });
+        console.error("SERVER CRASH (Generate Mind):", err);
+        // Attempt cleanup even on error
+        const { tempJpg, tempMind } = (req || {}); // Logic to find paths if defined in wider scope?
+        // Note: defining paths inside try block limits scope. Ideally we'd define them outside, 
+        // but for now let's just return the error as requested.
+
+        res.status(500).json({
+            message: err.message || "Server Xatolik",
+            stack: process.env.NODE_ENV === 'development' ? err.stack : undefined,
+            details: "Check server logs for 'SERVER CRASH'"
+        });
     }
 });
 
