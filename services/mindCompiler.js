@@ -1,49 +1,60 @@
 const puppeteer = require('puppeteer');
 const fs = require('fs');
 const path = require('path');
+const sharp = require('sharp');
 
 /**
  * Generate .mind file from marker image using Mind-AR web compiler
- * @param {string} imagePath - Local path to the marker image (already compressed)
+ * @param {string} imagePath - Local path to the marker image
  * @param {string} outputPath - Path to save the generated .mind file
  * @returns {Promise<string>} - Path to the generated .mind file
  */
 async function generateMindFile(imagePath, outputPath) {
     let browser;
+    let optimizedPath = null;
 
     try {
         console.log('🚀 Starting Mind-AR compiler...');
-        console.log('📍 Image path:', imagePath);
+        console.log('📍 Input Image path:', imagePath);
 
         if (!fs.existsSync(imagePath)) {
             throw new Error(`Image file not found: ${imagePath}`);
         }
 
-        console.log('✅ Image file verified');
+        // --- 1. OPTIMIZE IMAGE (CRITICAL) ---
+        // Resize to max 800px to prevent timeouts on low-resource servers
+        console.log('🎨 Optimizing image for compiler...');
+        const dir = path.dirname(imagePath);
+        const ext = path.extname(imagePath);
+        const name = path.basename(imagePath, ext);
+        optimizedPath = path.join(dir, `${name}_opt${ext}`);
 
-        // Launch Puppeteer with enhanced stability settings
-        console.log('🌐 Launching browser...');
+        await sharp(imagePath)
+            .resize(800, 800, { fit: 'inside' })
+            .jpeg({ quality: 80 })
+            .toFile(optimizedPath);
+
+        console.log('✅ Image optimized:', optimizedPath);
+
+        // --- 2. LAUNCH PUPPETEER ---
+        console.log('🌐 Launching browser (Low-Resource Mode)...');
         browser = await puppeteer.launch({
             headless: true,
             args: [
                 '--no-sandbox',
                 '--disable-setuid-sandbox',
-                '--disable-dev-shm-usage', // Critical for Render.com
+                '--disable-dev-shm-usage', // Critical for Render
+                '--single-process',        // Critical for Render
                 '--disable-accelerated-2d-canvas',
                 '--no-first-run',
                 '--no-zygote',
-                '--disable-gpu',
-                '--memory-pressure-handler', // Better RAM management
-                '--disable-software-rasterizer',
-                '--disable-background-timer-throttling'
+                '--disable-gpu'
             ],
             executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
-            timeout: 120000 // Increased timeout to 2 minutes
+            timeout: 120000 // Extended to 2 minutes
         });
 
         const page = await browser.newPage();
-
-        // Set viewport for consistency
         await page.setViewport({ width: 1280, height: 720 });
 
         // Navigate to Mind-AR compiler
@@ -53,19 +64,17 @@ async function generateMindFile(imagePath, outputPath) {
             timeout: 60000
         });
 
-        console.log('✅ Compiler page loaded');
-
         // Wait for file input
         const fileInputSelector = 'input[type="file"]';
         await page.waitForSelector(fileInputSelector, { timeout: 10000 });
 
-        // Upload image
+        // Upload OPTIMIZED image
         const fileInput = await page.$(fileInputSelector);
-        await fileInput.uploadFile(imagePath);
+        await fileInput.uploadFile(optimizedPath);
 
         console.log('📤 Image uploaded to compiler');
 
-        // Wait for compile button and click
+        // Wait for compile button
         await page.waitForSelector('button', { timeout: 10000 });
         const buttons = await page.$$('button');
 
@@ -80,18 +89,16 @@ async function generateMindFile(imagePath, outputPath) {
             }
         }
 
-        if (!compileButtonFound) {
-            throw new Error('Compile button not found on page');
-        }
+        if (!compileButtonFound) throw new Error('Compile button not found');
 
-        // Wait for download link (this may take 15-20 seconds)
-        console.log('⏳ Waiting for compilation (15-20 seconds)...');
+        // Wait for download link (Extended timeout)
+        console.log('⏳ Waiting for compilation (may take up to 2 mins)...');
         await page.waitForFunction(
             () => {
                 const links = Array.from(document.querySelectorAll('a'));
                 return links.some(link => link.href.includes('blob:') || link.download);
             },
-            { timeout: 90000 } // Increased timeout for slower servers
+            { timeout: 110000 } // Slightly less than browser timeout
         );
 
         console.log('✅ Compilation complete, downloading...');
@@ -103,11 +110,9 @@ async function generateMindFile(imagePath, outputPath) {
             return mindLink ? mindLink.href : null;
         });
 
-        if (!downloadLink) {
-            throw new Error('Download link not found after compilation');
-        }
+        if (!downloadLink) throw new Error('Download link not found');
 
-        // Download the .mind file
+        // Download buffer
         const mindFileBuffer = await page.evaluate(async (url) => {
             const response = await fetch(url);
             const blob = await response.blob();
@@ -116,43 +121,32 @@ async function generateMindFile(imagePath, outputPath) {
         }, downloadLink);
 
         if (!mindFileBuffer || mindFileBuffer.length === 0) {
-            throw new Error('.mind file buffer is empty');
+            throw new Error('Empty .mind file received');
         }
 
-        // Save to output path
         fs.writeFileSync(outputPath, Buffer.from(mindFileBuffer));
-
-        console.log('💾 .mind file saved successfully:', outputPath);
-        console.log('📊 File size:', mindFileBuffer.length, 'bytes');
+        console.log('💾 .mind file saved:', outputPath, `(${mindFileBuffer.length} bytes)`);
 
         return outputPath;
 
     } catch (error) {
         console.error('❌ Mind-AR compilation error:', error.message);
-        console.error('Stack trace:', error.stack);
 
-        // Provide detailed error information
+        // Fix: Removed reference to 'imageUrl' which was undefined
         const errorDetails = {
             message: error.message,
-            type: error.constructor.name,
-            imageUrl: imageUrl,
+            inputPath: imagePath,
             timestamp: new Date().toISOString()
         };
-
         console.error('Error details:', JSON.stringify(errorDetails, null, 2));
 
         throw new Error(`Mind-AR generation failed: ${error.message}`);
     } finally {
-        // Cleanup
-        if (browser) {
-            try {
-                await browser.close();
-                console.log('🔒 Browser closed');
-            } catch (e) {
-                console.error('Error closing browser:', e.message);
-            }
+        if (browser) await browser.close();
+        // Cleanup optimized user file
+        if (optimizedPath && fs.existsSync(optimizedPath)) {
+            try { fs.unlinkSync(optimizedPath); } catch (e) { }
         }
-        // Note: Temp image cleanup now handled in server.js
     }
 }
 
