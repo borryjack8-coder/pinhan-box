@@ -81,7 +81,7 @@ const ShopDashboard = () => {
         }
     };
 
-    // --- 4. CREATE GIFT FLOW ---
+    // --- 4. CREATE GIFT FLOW (NUCLEAR DEBUG MODE) ---
     const handleCreate = async () => {
         // Validation with specific alerts
         if (!form.clientName) return alert("Iltimos, Mijoz ismini kiriting!");
@@ -92,6 +92,9 @@ const ShopDashboard = () => {
             alert("Sizda yetarli limit mavjud emas! Administratorga murojaat qiling.");
             return;
         }
+
+        // 1. Alert to prove code is updated
+        alert("DEBUG START: Starting Gift Creation...");
 
         setIsGenerating(true);
         console.log("Starting Gift Creation...", form);
@@ -123,13 +126,15 @@ const ShopDashboard = () => {
             setForm({ clientName: '', videoUrl: '', markerUrl: '', pinCode: '' });
             fetchData(); // Refresh balance and list
 
-        } catch (err) {
-            console.error("Creation Error:", err);
-            const errMsg = err.response?.data?.error || err.message || "Noma'lum xatolik";
+        } catch (error) {
+            console.error("FULL ERROR:", error);
 
-            // Critical Feedback
-            alert(`XATOLIK: ${errMsg}\n\nIltimos qaytadan urinib ko'ring yoki Admin bilan bog'laning.`);
-            toast.error(errMsg);
+            // --- THE NUCLEAR OPTION ---
+            // This forces the browser to show the raw JSON object. 
+            // It cannot fail to show text.
+            const rawError = JSON.stringify(error.response || error, null, 2);
+            alert("CRITICAL ERROR RAW DUMP:\n\n" + rawError);
+            // --------------------------
         } finally {
             setIsGenerating(false);
         }
