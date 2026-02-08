@@ -14,44 +14,46 @@ async function generateMindFile(imagePath, outputPath) {
     let optimizedPath = null;
 
     try {
-        console.log('🚀 Starting Mind-AR compiler...');
+        console.log('🚀 Starting Mind-AR compiler (Aggressive Optimization Mode)...');
         console.log('📍 Input Image path:', imagePath);
 
         if (!fs.existsSync(imagePath)) {
             throw new Error(`Image file not found: ${imagePath}`);
         }
 
-        // --- 1. OPTIMIZE IMAGE (CRITICAL) ---
-        // Resize to max 800px to prevent timeouts on low-resource servers
-        console.log('🎨 Optimizing image for compiler...');
+        // --- 1. AGGRESSIVE IMAGE OPTIMIZATION ---
+        // Resize to max 500px (approx 60% pixel reduction from 800px) to survive low CPU
+        console.log('🎨 optimizing image (500px, Q60)...');
         const dir = path.dirname(imagePath);
         const ext = path.extname(imagePath);
         const name = path.basename(imagePath, ext);
         optimizedPath = path.join(dir, `${name}_opt${ext}`);
 
         await sharp(imagePath)
-            .resize(800, 800, { fit: 'inside' })
-            .jpeg({ quality: 80 })
+            .resize(500, 500, { fit: 'inside' })
+            .jpeg({ quality: 60, progressive: true }) // Lower quality, progressive for faster load
             .toFile(optimizedPath);
 
         console.log('✅ Image optimized:', optimizedPath);
 
         // --- 2. LAUNCH PUPPETEER ---
-        console.log('🌐 Launching browser (Low-Resource Mode)...');
+        console.log('🌐 Launching browser (Max Timeout Mode)...');
         browser = await puppeteer.launch({
             headless: true,
             args: [
                 '--no-sandbox',
                 '--disable-setuid-sandbox',
-                '--disable-dev-shm-usage', // Critical for Render
-                '--single-process',        // Critical for Render
+                '--disable-dev-shm-usage',
+                '--single-process',
                 '--disable-accelerated-2d-canvas',
                 '--no-first-run',
                 '--no-zygote',
-                '--disable-gpu'
+                '--disable-gpu',
+                '--js-flags="--max-old-space-size=512"' // Limit memory usage
             ],
             executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
-            timeout: 120000 // Extended to 2 minutes
+            timeout: 300000, // 5 Minutes Launch Timeout
+            protocolTimeout: 300000
         });
 
         const page = await browser.newPage();
@@ -91,14 +93,14 @@ async function generateMindFile(imagePath, outputPath) {
 
         if (!compileButtonFound) throw new Error('Compile button not found');
 
-        // Wait for download link (Extended timeout)
-        console.log('⏳ Waiting for compilation (may take up to 2 mins)...');
+        // Wait for download link (MAX TIMEOUT 5 MINS)
+        console.log('⏳ Waiting for compilation (Allowing up to 5 mins)...');
         await page.waitForFunction(
             () => {
                 const links = Array.from(document.querySelectorAll('a'));
                 return links.some(link => link.href.includes('blob:') || link.download);
             },
-            { timeout: 110000 } // Slightly less than browser timeout
+            { timeout: 300000 } // 5 Minutes Wait
         );
 
         console.log('✅ Compilation complete, downloading...');
@@ -132,7 +134,6 @@ async function generateMindFile(imagePath, outputPath) {
     } catch (error) {
         console.error('❌ Mind-AR compilation error:', error.message);
 
-        // Fix: Removed reference to 'imageUrl' which was undefined
         const errorDetails = {
             message: error.message,
             inputPath: imagePath,
@@ -143,7 +144,6 @@ async function generateMindFile(imagePath, outputPath) {
         throw new Error(`Mind-AR generation failed: ${error.message}`);
     } finally {
         if (browser) await browser.close();
-        // Cleanup optimized user file
         if (optimizedPath && fs.existsSync(optimizedPath)) {
             try { fs.unlinkSync(optimizedPath); } catch (e) { }
         }
