@@ -1,209 +1,125 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import Login from './pages/Login';
+import ShopDashboard from './pages/shop/ShopDashboard';
+import AdminDashboard from './pages/admin/AdminDashboard';
+import PrivateRoute from './components/PrivateRoute';
 import ARExperience from './components/ARExperience';
-import AdminPanel from './components/AdminPanel';
-import QRScanner from './components/QRScanner';
-import { v4 as uuidv4 } from 'uuid';
-import { Toaster, toast } from 'react-hot-toast';
-import { motion, AnimatePresence } from 'framer-motion';
+import toast, { Toaster } from 'react-hot-toast';
 
-function App() {
-    const [step, setStep] = useState('pin');
+// Legacy Verification Component Wrapper
+// We keep the logic for the "PIN Entry" page for end-users scanning QR codes
+import { useState, useEffect } from 'react';
+import axios from 'axios';
+
+const VerificationPage = () => {
     const [pin, setPin] = useState('');
     const [giftData, setGiftData] = useState(null);
-    const [showScanner, setShowScanner] = useState(false);
-    const [settings, setSettings] = useState({ telegram: '', instagram: '', phone: '' });
+    const [error, setError] = useState('');
+    const [step, setStep] = useState('pin'); // 'pin', 'loading', 'ar'
 
-    // Cloudinary URL Optimizer
-    const optimizeUrl = (url) => {
-        if (!url || !url.includes('cloudinary.com')) return url;
-        if (url.includes('/upload/')) {
-            return url.replace('/upload/', '/upload/f_auto,q_auto/');
-        }
-        return url;
-    };
-
-    // Routing Checks
-    const isInternalAdmin = window.location.pathname === '/admin';
-    const isViewRoute = window.location.pathname === '/view';
-
-    // Initialize
+    // Device ID Logic
+    const [deviceId, setDeviceId] = useState(localStorage.getItem('device_id'));
     useEffect(() => {
-        let devId = localStorage.getItem('pinhan_device_id');
-        if (!devId) {
-            devId = uuidv4();
-            localStorage.setItem('pinhan_device_id', devId);
+        if (!deviceId) {
+            const id = 'dev_' + Math.random().toString(36).substr(2, 9);
+            localStorage.setItem('device_id', id);
+            setDeviceId(id);
         }
+    }, []);
 
-        // Settings
-        fetch('/api/settings').then(res => res.json()).then(setSettings).catch(() => { });
-
-        // Check for ID (Legacy PIN via URL)
-        const urlParams = new URLSearchParams(window.location.search);
-        const urlId = urlParams.get('id');
-
-        // If /view route is active, we SKIP standard PIN logic and let ARExperience fetch data
-        if (isViewRoute && urlId) {
-            setStep('ar'); // Go directly to AR, ARExperience component will handle fetching by ID
-            return;
+    // Handle Direct Link
+    useEffect(() => {
+        const params = new URLSearchParams(window.location.search);
+        const id = params.get('id');
+        if (id) {
+            setStep('ar'); // Skip PIN, the ARExperience component will fetch data by ID
         }
+    }, []);
 
-        // Legacy: If id is present on root (mostly PIN sharing), try auto-verify
-        if (urlId) {
-            handleVerify(null, urlId);
-        }
-    }, [isViewRoute]);
-
-    const handleVerify = async (e, directId) => {
-        const targetPin = directId || pin;
-        if (!targetPin) return;
-
+    const handleVerify = async (e) => {
+        e.preventDefault();
         setStep('loading');
-        toast.loading('Sovg\'a qidirilmoqda...', { id: 'auth' });
-
-        const deviceId = localStorage.getItem('pinhan_device_id');
-
         try {
-            const res = await fetch('/api/verify-pin', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ pinCode: targetPin, deviceId }) // FIX: Use targetPin
-            });
-
-            const data = await res.json();
-
-            if (data.success) {
-                setGiftData(data.data);
-                toast.success('Sovg\'a topildi!', { id: 'auth' });
+            const res = await axios.post('/api/verify-pin', { pinCode: pin, deviceId });
+            if (res.data.success) {
+                setGiftData(res.data.data);
+                toast.success("Sovg'a topildi!");
                 setTimeout(() => setStep('ar'), 1000);
-            } else {
-                toast.error(data.error || "PIN xato", { id: 'auth' });
-                setStep('pin');
             }
         } catch (err) {
-            toast.error("Tarmoq xatosi", { id: 'auth' });
+            setError(err.response?.data?.error || "Xatolik");
             setStep('pin');
         }
     };
 
-    // ADMIN
-    if (isInternalAdmin) return <AdminPanel />;
-
-    // AR VIEW
-    // If step is AR, we render ARExperience.
-    // If giftData is null (View flow), pass null, and ARExperience will fetch from URL.
     if (step === 'ar') {
-        return (
-            <div style={{ width: '100vw', height: '100vh', background: 'transparent' }}>
-                <ARExperience
-                    videoUrl={giftData ? optimizeUrl(giftData.videoUrl) : null}
-                    targetFile={giftData ? giftData.targetFile : null}
-                />
-            </div>
-        );
+        const params = new URLSearchParams(window.location.search);
+        const id = params.get('id');
+        // If we have giftData from PIN verification, pass it. 
+        // If we have ID from URL, pass it implicitly via URL to ARExperience behavior (which checks URL).
+        // Actually, ARExperience handles both props vs URL. 
+        return <ARExperience videoUrl={giftData?.videoUrl} targetFile={giftData?.targetFile} />;
     }
 
-    // PUBLIC VIEW (PIN)
     return (
-        <div className="app-container" style={{ width: '100vw', height: '100vh', background: 'var(--bg-color)', color: '#fff', overflow: 'hidden' }}>
-            <Toaster position="top-center" reverseOrder={false} />
+        <div className="min-h-screen bg-black flex items-center justify-center p-4">
+            <Toaster />
+            <div className="w-full max-w-md text-center">
+                <img src="/logo.png" alt="logo" className="h-24 mx-auto mb-8 opacity-80" onError={(e) => e.target.style.display = 'none'} />
 
-            <AnimatePresence mode="wait">
-                {step === 'pin' && (
-                    <motion.div
-                        key="pin"
-                        initial={{ opacity: 0, y: 20 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, scale: 0.95 }}
-                        className="center-col"
-                        style={styles.centerCol}
-                    >
-                        {/* Logo & Intro */}
-                        <div className="logo-section" style={{ marginBottom: '40px' }}>
-                            <img src="/logo.png" alt="Logo" style={{ width: '120px', height: 'auto', borderRadius: '20px', marginBottom: '15px' }} />
-                            <h1 style={{ color: 'var(--primary)', fontSize: '42px', fontWeight: 'bold', margin: 0 }}>PINHAN BOX</h1>
-                            <p style={{ color: 'var(--text-dim)', fontSize: '14px', letterSpacing: '1px' }}>PREMIUM AR EXPERIENCE</p>
-                        </div>
+                {step === 'loading' ? (
+                    <div className="text-pinhan-gold animate-pulse text-xl">Qidirilmoqda...</div>
+                ) : (
+                    <form onSubmit={handleVerify} className="space-y-4">
+                        <h1 className="text-2xl font-bold text-white mb-2">PIN KODNI KIRITING</h1>
+                        <p className="text-zinc-500 mb-6 text-sm">Sovg'a qutisi ustidagi kodni kiriting</p>
 
-                        {/* Input Card */}
-                        <div className="glass-card glass" style={{ padding: '40px', width: '90%', maxWidth: '400px' }}>
-                            <p style={{ color: 'var(--text-dim)', marginBottom: '20px' }}>Sovg'ani ochish uchun PIN kodni kiriting</p>
+                        <input
+                            type="text"
+                            maxLength={4}
+                            value={pin}
+                            onChange={e => setPin(e.target.value.toUpperCase())}
+                            className="w-full bg-transparent border-b-2 border-zinc-700 text-center text-4xl font-bold text-pinhan-gold focus:border-pinhan-gold outline-none py-2 tracking-widest uppercase"
+                            placeholder="A1B2"
+                        />
 
-                            <input
-                                type="text"
-                                value={pin}
-                                onChange={(e) => setPin(e.target.value.toUpperCase())}
-                                placeholder="******"
-                                maxLength={10}
-                                style={styles.input}
-                            />
+                        {error && <p className="text-red-500 text-sm">{error}</p>}
 
-                            <button onClick={() => handleVerify()} className="btn-primary" style={{ ...styles.button, width: '100%' }}>
-                                OCHISH
-                            </button>
-
-                            <div style={{ margin: '30px 0', borderTop: '1px solid var(--glass-border)', position: 'relative' }}>
-                                <span style={{ position: 'absolute', top: '-10px', left: '50%', transform: 'translateX(-50%)', background: '#111', padding: '0 10px', fontSize: '12px', color: 'var(--text-dim)' }}>YOKI</span>
-                            </div>
-
-                            <button onClick={() => setShowScanner(true)} className="nav-btn" style={{ width: '100%', borderColor: 'var(--primary)', color: 'var(--primary)' }}>
-                                QR KODNI SKANERLASH
-                            </button>
-                        </div>
-
-                        {/* Footer */}
-                        <div style={{ position: 'fixed', bottom: '30px', display: 'flex', gap: '20px' }}>
-                            {settings.telegram && <a href={`https://t.me/${settings.telegram.replace('@', '')}`} target="_blank" className="nav-btn">Telegram</a>}
-                            {settings.instagram && <a href={`https://instagram.com/${settings.instagram}`} target="_blank" className="nav-btn">Instagram</a>}
-                        </div>
-                    </motion.div>
+                        <button type="submit" className="w-full bg-zinc-800 text-white py-4 rounded-xl font-bold hover:bg-zinc-700 transition-colors">
+                            KORISH
+                        </button>
+                    </form>
                 )}
-
-                {step === 'loading' && (
-                    <motion.div key="loading" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} style={styles.centerCol}>
-                        <div className="loader" style={styles.spinner}></div>
-                        <h2 style={{ marginTop: '20px', color: 'var(--primary)', fontSize: '18px' }}>Tayyorlanmoqda...</h2>
-                    </motion.div>
-                )}
-            </AnimatePresence>
-
-            {showScanner && (
-                <QRScanner
-                    onScanSuccess={(id) => { handleVerify(null, id); setShowScanner(false); }}
-                    onScanError={() => { }}
-                    onClose={() => setShowScanner(false)}
-                />
-            )}
+            </div>
         </div>
     );
-}
+};
 
-const styles = {
-    centerCol: {
-        display: 'flex', flexDirection: 'column',
-        alignItems: 'center', justifyContent: 'center',
-        height: '100%', width: '100%', padding: '20px', textAlign: 'center'
-    },
-    input: {
-        padding: '18px', borderRadius: '15px',
-        border: '2px solid #333', background: '#000',
-        color: '#FFD700', fontSize: '24px', fontWeight: 'bold',
-        textAlign: 'center', letterSpacing: '4px',
-        width: '100%', maxWidth: '280px', outline: 'none'
-    },
-    button: {
-        marginTop: '30px', padding: '18px 60px',
-        borderRadius: '40px', border: 'none',
-        background: 'linear-gradient(135deg, #FFD700 0%, #B8860B 100%)',
-        color: '#000', fontWeight: 'bold', fontSize: '16px',
-        cursor: 'pointer', boxShadow: '0 10px 20px rgba(0,0,0,0.5)'
-    },
-    spinner: {
-        width: '50px', height: '50px',
-        border: '4px solid rgba(255,215,0,0.1)',
-        borderTop: '4px solid #FFD700',
-        borderRadius: '50%',
-        animation: 'spin 1s linear infinite'
-    }
+const App = () => {
+    return (
+        <Router>
+            <Routes>
+                {/* PUBLIC ROUTES */}
+                <Route path="/login" element={<Login />} />
+                <Route path="/" element={<VerificationPage />} />
+                <Route path="/view" element={<VerificationPage />} />
+
+                {/* PROTECTED ROUTES */}
+                <Route path="/admin" element={
+                    <PrivateRoute roles={['admin']}>
+                        <AdminDashboard />
+                    </PrivateRoute>
+                } />
+
+                <Route path="/shop" element={
+                    <PrivateRoute roles={['shop']}>
+                        <ShopDashboard />
+                    </PrivateRoute>
+                } />
+            </Routes>
+        </Router>
+    );
 };
 
 export default App;

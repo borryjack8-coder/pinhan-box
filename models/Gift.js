@@ -14,6 +14,14 @@ const giftSchema = new mongoose.Schema({
     videoUrl: { type: String, required: true },
     targetFile: { type: String, required: true }, // .mind file url
 
+    // SaaS / Multi-tenant Link
+    userId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User',
+        required: true
+    },
+    shopName: { type: String }, // Optional denormalization
+
     // Optional Metadata
     clientName: { type: String },
     createdAt: { type: Date, default: Date.now },
@@ -33,6 +41,10 @@ const giftSchema = new mongoose.Schema({
         type: String, // Cloudinary URL for the marker image
         default: null
     }
+}
 });
+
+// Scalability Index: Faster queries for shops with many gifts
+giftSchema.index({ userId: 1 });
 
 module.exports = mongoose.model('Gift', giftSchema);
