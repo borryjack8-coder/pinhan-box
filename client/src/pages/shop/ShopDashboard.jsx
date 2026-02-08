@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
-import toast, { Toaster } from 'react-hot-toast'; // We might need to install react-hot-toast if not present found in package.json
+import toast, { Toaster } from 'react-hot-toast';
 import QRCode from 'react-qr-code';
 
 const ShopDashboard = () => {
@@ -19,6 +19,11 @@ const ShopDashboard = () => {
     // --- 1. INITIAL FETCH ---
     useEffect(() => {
         fetchData();
+        // DEBUG: Check Environment
+        console.log("Environment Check:", {
+            NODE_ENV: import.meta.env.MODE,
+            API_URL: import.meta.env.VITE_API_URL || 'relative path'
+        });
     }, []);
 
     const fetchData = async () => {
@@ -33,6 +38,7 @@ const ShopDashboard = () => {
             localStorage.setItem('user', JSON.stringify(meRes.data)); // Sync
             setGifts(giftsRes.data);
         } catch (err) {
+            console.error("Fetch Data Error:", err);
             if (err.response?.status === 401) {
                 localStorage.clear();
                 navigate('/login');
@@ -50,6 +56,8 @@ const ShopDashboard = () => {
     const handleFileUpload = async (e, type) => {
         const file = e.target.files[0];
         if (!file) return;
+
+        console.log(`Starting Upload [${type}]:`, file.name, `Size: ${(file.size / 1024 / 1024).toFixed(2)} MB`);
         setIsUploading(true);
 
         const formData = new FormData();
@@ -60,10 +68,14 @@ const ShopDashboard = () => {
             const res = await axios.post('/api/shop/upload', formData, {
                 headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'multipart/form-data' }
             });
+            console.log("Upload Success:", res.data);
             setForm(prev => ({ ...prev, [type]: res.data.url }));
             toast.success("Fayl yuklandi");
         } catch (err) {
-            toast.error("Yuklash xatosi");
+            console.error("Upload Error:", err);
+            const errMsg = err.response?.data?.error || err.message || "Yuklashda xatolik";
+            alert(`XATOLIK: ${errMsg}`);
+            toast.error(errMsg);
         } finally {
             setIsUploading(false);
         }
@@ -71,33 +83,53 @@ const ShopDashboard = () => {
 
     // --- 4. CREATE GIFT FLOW ---
     const handleCreate = async () => {
-        if (!form.clientName || !form.videoUrl || !form.markerUrl) return toast.error("Barcha maydonlarni to'ldiring");
-        if (user.balance <= 0) return toast.error("Mablag' yetarli emas! Administratorga bog'laning.");
+        // Validation with specific alerts
+        if (!form.clientName) return alert("Iltimos, Mijoz ismini kiriting!");
+        if (!form.videoUrl) return alert("Video yuklanmagan!");
+        if (!form.markerUrl) return alert("Rasm (Marker) yuklanmagan!");
+
+        if (user.balance <= 0) {
+            alert("Sizda yetarli limit mavjud emas! Administratorga murojaat qiling.");
+            return;
+        }
 
         setIsGenerating(true);
+        console.log("Starting Gift Creation...", form);
         const token = localStorage.getItem('token');
 
         try {
             // A. Generate Mind File
+            console.log("Step 1: Generating .mind file...");
             const genRes = await axios.post('/api/shop/generate-mind', { imageUrl: form.markerUrl }, {
                 headers: { Authorization: `Bearer ${token}` }
             });
+            console.log("Mind File Generated:", genRes.data);
 
             // B. Create Gift (Transaction)
+            console.log("Step 2: Creating Gift Transaction...");
             const payload = { ...form, targetFile: genRes.data.mindUrl };
             const createRes = await axios.post('/api/shop/gifts', payload, {
                 headers: { Authorization: `Bearer ${token}` }
             });
+            console.log("Gift Created:", createRes.data);
 
             setCreatedGift(createRes.data.gift);
+
+            // SUCCESS FEEDBACK
+            alert("Muvaffaqiyatli yaratildi! Balansdan 1 limit yechildi.");
             toast.success("Sovg'a yaratildi (-1 Credit)");
+
             setIsCreating(false);
             setForm({ clientName: '', videoUrl: '', markerUrl: '', pinCode: '' });
             fetchData(); // Refresh balance and list
 
         } catch (err) {
-            console.error(err);
-            toast.error(err.response?.data?.error || "Xatolik yuz berdi");
+            console.error("Creation Error:", err);
+            const errMsg = err.response?.data?.error || err.message || "Noma'lum xatolik";
+
+            // Critical Feedback
+            alert(`XATOLIK: ${errMsg}\n\nIltimos qaytadan urinib ko'ring yoki Admin bilan bog'laning.`);
+            toast.error(errMsg);
         } finally {
             setIsGenerating(false);
         }
@@ -106,7 +138,7 @@ const ShopDashboard = () => {
     // --- 5. RENDER ---
     return (
         <div className="min-h-screen bg-pinhan-black text-white p-4 pb-20">
-            <Toaster />
+            <Toaster position="top-center" />
 
             {/* HEADER */}
             <header className="flex justify-between items-center mb-6">
@@ -154,11 +186,13 @@ const ShopDashboard = () => {
                             <label className={`block p-4 rounded border text-center cursor-pointer ${form.videoUrl ? 'border-green-500 text-green-500' : 'border-dashed border-zinc-600'}`}>
                                 <span className="text-sm">🎬 Video Yuklash</span>
                                 <input type="file" accept="video/*" className="hidden" onChange={e => handleFileUpload(e, 'videoUrl')} />
+                                {isUploading && <span className="block text-xs text-yellow-500 mt-1">Yuklanmoqda...</span>}
                             </label>
 
                             <label className={`block p-4 rounded border text-center cursor-pointer ${form.markerUrl ? 'border-green-500 text-green-500' : 'border-dashed border-zinc-600'}`}>
                                 <span className="text-sm">🖼️ Rasm Yuklash</span>
                                 <input type="file" accept="image/*" className="hidden" onChange={e => handleFileUpload(e, 'markerUrl')} />
+                                {isUploading && <span className="block text-xs text-yellow-500 mt-1">Yuklanmoqda...</span>}
                             </label>
                         </div>
 
@@ -167,9 +201,9 @@ const ShopDashboard = () => {
                             <button
                                 onClick={handleCreate}
                                 disabled={isUploading || isGenerating}
-                                className="flex-1 py-3 rounded bg-pinhan-gold text-black font-bold disabled:opacity-50"
+                                className={`flex-1 py-3 rounded text-black font-bold transition-all ${isGenerating ? 'bg-yellow-800 cursor-wait' : 'bg-pinhan-gold'}`}
                             >
-                                {isGenerating ? 'Yaratilmoqda...' : 'YARATISH (-1 CR)'}
+                                {isGenerating ? 'YUKLANMOQDA... (Kuting)' : 'YARATISH (-1 CR)'}
                             </button>
                         </div>
                     </div>
