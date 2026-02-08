@@ -215,6 +215,16 @@ app.post('/api/shop/upload-mind', auth(['admin', 'shop']), upload.single('file')
 app.post('/api/shop/generate-mind', auth(['admin', 'shop']), async (req, res) => {
     try {
         console.log("--- START: Generate Mind Process ---");
+
+        // 0. FAIL FAST: Check Environment
+        if (!process.env.CLOUDINARY_CLOUD_NAME) {
+            console.error("FATAL: Cloudinary Config Missing in Render Environment!");
+            return res.status(500).json({
+                success: false,
+                message: "FATAL: Cloudinary Config Missing in Render Environment! Check your Dashboard Env Vars."
+            });
+        }
+
         console.log("Check Env:", {
             cloud_name: process.env.CLOUDINARY_CLOUD_NAME ? 'OK' : 'MISSING',
             key: process.env.CLOUDINARY_API_KEY ? 'OK' : 'MISSING'
@@ -256,16 +266,18 @@ app.post('/api/shop/generate-mind', auth(['admin', 'shop']), async (req, res) =>
         res.json({ success: true, mindUrl: result.secure_url });
 
     } catch (err) {
-        console.error("SERVER CRASH (Generate Mind):", err);
-        // Attempt cleanup even on error
-        const { tempJpg, tempMind } = (req || {}); // Logic to find paths if defined in wider scope?
-        // Note: defining paths inside try block limits scope. Ideally we'd define them outside, 
-        // but for now let's just return the error as requested.
+        console.error("CRITICAL ERROR (Generate Mind):", err);
 
-        res.status(500).json({
-            message: err.message || "Server Xatolik",
+        // Attempt cleanup
+        try {
+            // We can't easily access temp paths here due to scope, but main crash is usually before cleanup
+        } catch (e) { }
+
+        return res.status(500).json({
+            success: false,
+            message: "SERVER ERROR: " + (err.message || "Unknown Error"),
             stack: process.env.NODE_ENV === 'development' ? err.stack : undefined,
-            details: "Check server logs for 'SERVER CRASH'"
+            details: "Check server logs for 'CRITICAL ERROR'"
         });
     }
 });
