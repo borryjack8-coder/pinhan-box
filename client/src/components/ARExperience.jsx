@@ -192,19 +192,21 @@ const ARExperience = ({ videoUrl: propVideoUrl, targetFile: propTargetFile }) =>
 
     // 4. AR Scene
     return (
-        <div style={{ width: '100%', height: '100%', position: 'relative', overflow: 'hidden' }}>
+        <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', zIndex: 999 }}>
             <style dangerouslySetInnerHTML={{
                 __html: `
+                html, body { margin: 0; padding: 0; overflow: hidden !important; width: 100%; height: 100%; }
                 video#gift-video { opacity: 0; position:absolute; z-index:-10; } 
                 .mindar-ui-overlay { display: none !important; }
             `}} />
 
             <div style={{
-                position: 'absolute', top: 10, left: 10, zIndex: 1000,
-                background: 'rgba(0,0,0,0.6)', padding: '5px 10px', borderRadius: '6px',
-                color: '#0f0', fontFamily: 'monospace', fontSize: '12px', pointerEvents: 'none'
+                position: 'absolute', top: 20, left: '50%', transform: 'translateX(-50%)', zIndex: 1000,
+                background: 'rgba(0,0,0,0.6)', padding: '8px 16px', borderRadius: '20px',
+                color: '#fff', fontFamily: 'sans-serif', fontSize: '14px', fontWeight: 'bold', pointerEvents: 'none',
+                boxShadow: '0 4px 6px rgba(0,0,0,0.1)', border: '1px solid rgba(255,255,255,0.2)'
             }}>
-                STATUS: {status}
+                {status === "Kamera Tayyor - Marker qidiring" ? "Kamerani RASMGA tuting" : status}
             </div>
 
             {/* OPTIMIZED SCENE SETTINGS */}
@@ -216,15 +218,16 @@ const ARExperience = ({ videoUrl: propVideoUrl, targetFile: propTargetFile }) =>
                 vr-mode-ui="enabled: false"
                 device-orientation-permission-ui="enabled: false"
                 style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', zIndex: 1 }}
+                embedded
             >
                 <a-assets>
                     <video
                         id="gift-video"
                         src={fetchedVideoUrl}
                         preload="auto"
-                        playsInline
+                        playsInline={true}
                         webkit-playsinline="true"
-                        loop
+                        loop={true}
                         crossOrigin="anonymous"
                         onLoadedMetadata={handleMetadata}
                     ></video>
@@ -239,8 +242,7 @@ const ARExperience = ({ videoUrl: propVideoUrl, targetFile: propTargetFile }) =>
                         height={videoHeight}
                         width="1"
                         rotation="0 0 0"
-                        segments-height="1"
-                        segments-width="1"
+                        opacity="1"
                     ></a-plane>
                 </a-entity>
             </a-scene>
