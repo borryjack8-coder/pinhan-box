@@ -21,7 +21,7 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const MASTER_PIN = process.env.MASTER_PIN || '7777';
 
-console.log('🚀 Starting Server (SaaS Mode)...');
+console.log('🚀 Starting Server (Client-Side MindAR Mode)...');
 
 // --- 1. CRITICAL: ENSURE DIRECTORIES EXIST ---
 const uploadsDir = path.join(__dirname, 'uploads');
