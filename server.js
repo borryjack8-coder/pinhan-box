@@ -103,6 +103,10 @@ const auth = (roles = []) => {
             const user = await User.findById(decoded.id).select('-password');
             if (!user) return res.status(401).json({ error: 'User no longer exists' });
 
+            if (user.isBlocked) {
+                return res.status(403).json({ error: "Do'kon bloklangan! Administratorga murojaat qiling." });
+            }
+
             if (roles.length && !roles.includes(user.role)) {
                 return res.status(403).json({ error: 'Access denied' });
             }
