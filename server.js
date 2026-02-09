@@ -15,7 +15,7 @@ const bcrypt = require('bcryptjs');
 const Gift = require('./models/Gift');
 const Settings = require('./models/Settings');
 const User = require('./models/User');
-const { generateMindFile } = require('./services/mindCompiler');
+// const { generateMindFile } = require('./services/mindCompiler');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -209,86 +209,6 @@ app.post('/api/shop/upload', auth(['admin', 'shop']), upload.single('file'), (re
 app.post('/api/shop/upload-mind', auth(['admin', 'shop']), upload.single('file'), (req, res) => {
     if (!req.file) return res.status(400).json({ error: 'Fayl yo\'q' });
     res.json({ mindUrl: req.file.path });
-});
-
-// Generate Mind
-app.post('/api/shop/generate-mind', auth(['admin', 'shop']), async (req, res) => {
-    try {
-        console.log("--- START: Generate Mind Process ---");
-
-        // 1. Request & Auth Debug
-        console.log("1. Request received");
-        console.log("2. User from Request:", req.user ? `${req.user.username} (${req.user._id})` : "UNDEFINED");
-
-        // 2. Explicit Auth Check
-        if (!req.user || !req.user._id) {
-            console.error("AUTH ERROR: User not found in request (Middleware failed).");
-            return res.status(401).json({ message: "AUTH ERROR: User not found in request. Middleware failed." });
-        }
-        // 0. FAIL FAST: Check Environment
-        if (!process.env.CLOUDINARY_CLOUD_NAME) {
-            console.error("FATAL: Cloudinary Config Missing in Render Environment!");
-            return res.status(500).json({
-                success: false,
-                message: "FATAL: Cloudinary Config Missing in Render Environment! Check your Dashboard Env Vars."
-            });
-        }
-
-        console.log("Check Env:", {
-            cloud_name: process.env.CLOUDINARY_CLOUD_NAME ? 'OK' : 'MISSING',
-            key: process.env.CLOUDINARY_API_KEY ? 'OK' : 'MISSING'
-        });
-
-        const { imageUrl } = req.body;
-        if (!imageUrl) throw new Error('Rasm URL (imageUrl) yetib kelmadi');
-
-        // Check balance
-        if (req.user.role === 'shop' && req.user.balance <= 0) {
-            return res.status(402).json({ error: 'Hisobingizda mablag\' yetarli emas (0 credits)' });
-        }
-
-        console.log("1. Fetching & Compressing Image:", imageUrl);
-        const compressed = await compressImage(imageUrl);
-
-        const tempJpg = path.join(tempDir, `temp_${Date.now()}.jpg`);
-        const tempMind = path.join(tempDir, `temp_${Date.now()}.mind`);
-
-        console.log("2. Writing Temp Files:", tempJpg);
-        fs.writeFileSync(tempJpg, compressed);
-
-        console.log("3. Generating Mind File (Heavy Process)...");
-        await generateMindFile(tempJpg, tempMind);
-
-        console.log("4. Uploading .mind to Cloudinary...");
-        const result = await cloudinary.uploader.upload(tempMind, {
-            folder: 'pinhan_gifts',
-            resource_type: 'raw',
-            public_id: `mind_${Date.now()}`,
-            use_filename: true, unique_filename: false
-        });
-
-        console.log("5. Cleanup...");
-        if (fs.existsSync(tempJpg)) fs.unlinkSync(tempJpg);
-        if (fs.existsSync(tempMind)) fs.unlinkSync(tempMind);
-
-        console.log("✅ Success! URL:", result.secure_url);
-        res.json({ success: true, mindUrl: result.secure_url });
-
-    } catch (err) {
-        console.error("CRITICAL ERROR (Generate Mind):", err);
-
-        // Attempt cleanup
-        try {
-            // We can't easily access temp paths here due to scope, but main crash is usually before cleanup
-        } catch (e) { }
-
-        return res.status(500).json({
-            success: false,
-            message: "SERVER ERROR: " + (err.message || "Unknown Error"),
-            stack: process.env.NODE_ENV === 'development' ? err.stack : undefined,
-            details: "Check server logs for 'CRITICAL ERROR'"
-        });
-    }
 });
 
 // CREATE GIFT (THE TRANSACTION)

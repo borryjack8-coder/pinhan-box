@@ -15,15 +15,20 @@ const ShopDashboard = () => {
     const [isUploading, setIsUploading] = useState(false);
     const [isGenerating, setIsGenerating] = useState(false);
     const [createdGift, setCreatedGift] = useState(null);
+    const [progressMsg, setProgressMsg] = useState('');
 
-    // --- 1. INITIAL FETCH ---
+    // --- 1. INITIAL FETCH & LOAD COMPILER ---
     useEffect(() => {
         fetchData();
-        // DEBUG: Check Environment
-        console.log("Environment Check:", {
-            NODE_ENV: import.meta.env.MODE,
-            API_URL: import.meta.env.VITE_API_URL || 'relative path'
-        });
+
+        // Load MindAR Compiler Script
+        if (!window.MINDAR) {
+            const script = document.createElement('script');
+            script.src = "https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image.prod.js";
+            script.async = true;
+            script.onload = () => console.log("MindAR Compiler Loaded");
+            document.body.appendChild(script);
+        }
     }, []);
 
     const fetchData = async () => {
@@ -57,6 +62,12 @@ const ShopDashboard = () => {
         const file = e.target.files[0];
         if (!file) return;
 
+        // Validation for Image Size (Client Side)
+        if (type === 'markerUrl' && file.size > 5 * 1024 * 1024) {
+            alert("Rasm hajmi juda katta! 5MB dan kichik rasm yuklang.");
+            return;
+        }
+
         console.log(`Starting Upload [${type}]:`, file.name, `Size: ${(file.size / 1024 / 1024).toFixed(2)} MB`);
         setIsUploading(true);
 
@@ -81,9 +92,40 @@ const ShopDashboard = () => {
         }
     };
 
-    // --- 4. CREATE GIFT FLOW (NUCLEAR DEBUG MODE) ---
+    // --- HELPER: CLIENT-SIDE COMPILATION ---
+    const compileMindFile = async (imageUrl) => {
+        return new Promise((resolve, reject) => {
+            if (!window.MINDAR || !window.MINDAR.IMAGE) {
+                reject(new Error("MindAR Compiler script not loaded yet. Please refresh."));
+                return;
+            }
+
+            const img = new Image();
+            img.crossOrigin = "Anonymous";
+            img.onload = async () => {
+                try {
+                    const compiler = new window.MINDAR.IMAGE.Compiler();
+                    console.log("Starting Compilation...");
+                    await compiler.compileImageTargets([img], (progress) => {
+                        console.log("Compile Progress:", progress);
+                        setProgressMsg(`Tayyorlanmoqda... ${(progress).toFixed(0)}%`);
+                    });
+
+                    const exportedBuffer = await compiler.exportData();
+                    const blob = new Blob([exportedBuffer]);
+                    const file = new File([blob], "targets.mind", { type: "application/octet-stream" });
+                    resolve(file);
+                } catch (err) {
+                    reject(err);
+                }
+            };
+            img.onerror = (err) => reject(new Error("Failed to load image for compilation."));
+            img.src = imageUrl;
+        });
+    };
+
+    // --- 4. CREATE GIFT FLOW (CLIENT-SIDE) ---
     const handleCreate = async () => {
-        // Validation with specific alerts
         if (!form.clientName) return alert("Iltimos, Mijoz ismini kiriting!");
         if (!form.videoUrl) return alert("Video yuklanmagan!");
         if (!form.markerUrl) return alert("Rasm (Marker) yuklanmagan!");
@@ -93,24 +135,36 @@ const ShopDashboard = () => {
             return;
         }
 
-        // 1. Alert to prove code is updated
-        alert("DEBUG START: Starting Gift Creation...");
-
         setIsGenerating(true);
-        console.log("Starting Gift Creation...", form);
+        setProgressMsg("Boshlanmoqda...");
         const token = localStorage.getItem('token');
 
         try {
-            // A. Generate Mind File
-            console.log("Step 1: Generating .mind file...");
-            const genRes = await axios.post('/api/shop/generate-mind', { imageUrl: form.markerUrl }, {
-                headers: { Authorization: `Bearer ${token}` }
-            });
-            console.log("Mind File Generated:", genRes.data);
+            // STEP A: Compile .mind file in Browser
+            console.log("Step 1: Client-Side Compilation...");
+            setProgressMsg("AR Fayl tayyorlanmoqda... (Brauzerda)");
 
-            // B. Create Gift (Transaction)
-            console.log("Step 2: Creating Gift Transaction...");
-            const payload = { ...form, targetFile: genRes.data.mindUrl };
+            const mindFile = await compileMindFile(form.markerUrl);
+            console.log("Mind File Compiled:", mindFile.name, mindFile.size);
+
+            // STEP B: Upload .mind file
+            console.log("Step 2: Uploading .mind file...");
+            setProgressMsg("AR Fayl yuklanmoqda...");
+
+            const mindFormData = new FormData();
+            mindFormData.append('file', mindFile);
+
+            const uploadRes = await axios.post('/api/shop/upload-mind', mindFormData, {
+                headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'multipart/form-data' }
+            });
+            const mindUrl = uploadRes.data.mindUrl;
+            console.log("Mind File Uploaded:", mindUrl);
+
+            // STEP C: Create Gift (Transaction)
+            console.log("Step 3: Creating Gift Transaction...");
+            setProgressMsg("Saqlanmoqda...");
+
+            const payload = { ...form, targetFile: mindUrl };
             const createRes = await axios.post('/api/shop/gifts', payload, {
                 headers: { Authorization: `Bearer ${token}` }
             });
@@ -118,25 +172,20 @@ const ShopDashboard = () => {
 
             setCreatedGift(createRes.data.gift);
 
-            // SUCCESS FEEDBACK
             alert("Muvaffaqiyatli yaratildi! Balansdan 1 limit yechildi.");
             toast.success("Sovg'a yaratildi (-1 Credit)");
 
             setIsCreating(false);
             setForm({ clientName: '', videoUrl: '', markerUrl: '', pinCode: '' });
-            fetchData(); // Refresh balance and list
+            fetchData();
 
         } catch (error) {
             console.error("FULL ERROR:", error);
-
-            // --- THE NUCLEAR OPTION ---
-            // This forces the browser to show the raw JSON object. 
-            // It cannot fail to show text.
-            const rawError = JSON.stringify(error.response || error, null, 2);
-            alert("CRITICAL ERROR RAW DUMP:\n\n" + rawError);
-            // --------------------------
+            const rawError = JSON.stringify(error.response?.data || error.message, null, 2);
+            alert("XATOLIK YUZ BERDI:\n\n" + rawError);
         } finally {
             setIsGenerating(false);
+            setProgressMsg("");
         }
     };
 
@@ -208,7 +257,7 @@ const ShopDashboard = () => {
                                 disabled={isUploading || isGenerating}
                                 className={`flex-1 py-3 rounded text-black font-bold transition-all ${isGenerating ? 'bg-yellow-800 cursor-wait' : 'bg-pinhan-gold'}`}
                             >
-                                {isGenerating ? 'YUKLANMOQDA... (Kuting)' : 'YARATISH (-1 CR)'}
+                                {isGenerating ? (progressMsg || 'YARATILMOQDA...') : 'YARATISH (-1 CR)'}
                             </button>
                         </div>
                     </div>
