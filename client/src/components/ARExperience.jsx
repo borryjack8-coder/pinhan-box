@@ -195,9 +195,10 @@ const ARExperience = ({ videoUrl: propVideoUrl, targetFile: propTargetFile }) =>
         <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', zIndex: 999 }}>
             <style dangerouslySetInnerHTML={{
                 __html: `
-                html, body { margin: 0; padding: 0; overflow: hidden !important; width: 100%; height: 100%; }
+                html, body { margin: 0; padding: 0; overflow: hidden !important; width: 100%; height: 100%; background: black; }
                 video#gift-video { opacity: 0; position:absolute; z-index:-10; } 
                 .mindar-ui-overlay { display: none !important; }
+                .a-canvas { width: 100% !important; height: 100% !important; top: 0 !important; left: 0 !important; position: absolute !important; }
             `}} />
 
             <div style={{
@@ -206,7 +207,7 @@ const ARExperience = ({ videoUrl: propVideoUrl, targetFile: propTargetFile }) =>
                 color: '#fff', fontFamily: 'sans-serif', fontSize: '14px', fontWeight: 'bold', pointerEvents: 'none',
                 boxShadow: '0 4px 6px rgba(0,0,0,0.1)', border: '1px solid rgba(255,255,255,0.2)'
             }}>
-                {status === "Kamera Tayyor - Marker qidiring" ? "Kamerani RASMGA tuting" : status}
+                {status === "Kamera Tayyor - Marker qidiring" ? "Kamerani RASMGA tuting 📸" : status}
             </div>
 
             {/* OPTIMIZED SCENE SETTINGS */}
@@ -225,9 +226,9 @@ const ARExperience = ({ videoUrl: propVideoUrl, targetFile: propTargetFile }) =>
                         id="gift-video"
                         src={fetchedVideoUrl}
                         preload="auto"
-                        playsInline={true}
+                        playsInline
                         webkit-playsinline="true"
-                        loop={true}
+                        loop="true"
                         crossOrigin="anonymous"
                         onLoadedMetadata={handleMetadata}
                     ></video>
@@ -236,14 +237,13 @@ const ARExperience = ({ videoUrl: propVideoUrl, targetFile: propTargetFile }) =>
                 <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
 
                 <a-entity mindar-image-target="targetIndex: 0">
-                    <a-plane
+                    <a-video
                         src="#gift-video"
                         position="0 0 0"
                         height={videoHeight}
                         width="1"
                         rotation="0 0 0"
-                        opacity="1"
-                    ></a-plane>
+                    ></a-video>
                 </a-entity>
             </a-scene>
         </div>
