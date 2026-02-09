@@ -35,6 +35,13 @@ const giftSchema = new mongoose.Schema({
         type: String
     },
 
+    // --- VISIBILITY ---
+    visibility: {
+        type: String,
+        enum: ['public', 'secret'],
+        default: 'secret'
+    },
+
     // --- SECURITY: Device Locking ---
     boundDeviceId: {
         type: String,

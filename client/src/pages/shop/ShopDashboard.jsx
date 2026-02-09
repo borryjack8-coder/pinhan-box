@@ -11,7 +11,7 @@ const ShopDashboard = () => {
     const [isCreating, setIsCreating] = useState(false);
 
     // Form State
-    const [form, setForm] = useState({ clientName: '', videoUrl: '', markerUrl: '', pinCode: '' });
+    const [form, setForm] = useState({ clientName: '', videoUrl: '', markerUrl: '', pinCode: '', visibility: 'secret' });
     const [isUploading, setIsUploading] = useState(false);
     const [isGenerating, setIsGenerating] = useState(false);
     const [createdGift, setCreatedGift] = useState(null);
@@ -176,7 +176,7 @@ const ShopDashboard = () => {
             toast.success("Sovg'a yaratildi (-1 Credit)");
 
             setIsCreating(false);
-            setForm({ clientName: '', videoUrl: '', markerUrl: '', pinCode: '' });
+            setForm({ clientName: '', videoUrl: '', markerUrl: '', pinCode: '', visibility: 'secret' });
             fetchData();
 
         } catch (error) {
@@ -228,6 +228,22 @@ const ShopDashboard = () => {
                             value={form.clientName}
                             onChange={e => setForm({ ...form, clientName: e.target.value })}
                         />
+
+                        {/* Visibility Selection */}
+                        <div className="grid grid-cols-2 gap-2">
+                            <button
+                                onClick={() => setForm({ ...form, visibility: 'secret' })}
+                                className={`p-3 rounded border text-xs font-bold ${form.visibility === 'secret' ? 'bg-pinhan-gold text-black border-pinhan-gold' : 'bg-transparent text-zinc-500 border-zinc-700'}`}
+                            >
+                                🔒 SIRLI (1 Qurilma)
+                            </button>
+                            <button
+                                onClick={() => setForm({ ...form, visibility: 'public' })}
+                                className={`p-3 rounded border text-xs font-bold ${form.visibility === 'public' ? 'bg-green-500 text-black border-green-500' : 'bg-transparent text-zinc-500 border-zinc-700'}`}
+                            >
+                                🌍 HAMMA (Cheksiz)
+                            </button>
+                        </div>
                         <input
                             placeholder="PIN (Ixtiyoriy)"
                             className="w-full bg-black p-3 rounded border border-zinc-700 focus:border-pinhan-gold outline-none"

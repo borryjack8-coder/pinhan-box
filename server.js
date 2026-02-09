@@ -317,9 +317,14 @@ app.post('/api/verify-pin', async (req, res) => {
         const gift = await Gift.findOne({ pinCode: pinCode.toUpperCase() });
         if (!gift) return res.status(404).json({ error: "PIN topilmadi" });
 
-        // Logic for binding check ...
-        if (!gift.boundDeviceId) gift.boundDeviceId = deviceId;
-        else if (gift.boundDeviceId !== deviceId) return res.status(403).json({ error: "Boshqa qurilmaga bog'langan!" });
+        if (!gift) return res.status(404).json({ error: "PIN topilmadi" });
+
+        // Logic for binding check
+        if (gift.visibility === 'secret') {
+            if (!gift.boundDeviceId) gift.boundDeviceId = deviceId;
+            else if (gift.boundDeviceId !== deviceId) return res.status(403).json({ error: "Boshqa qurilmaga bog'langan!" });
+        }
+        // If 'public', we skip binding check (allow unlimited devices)
 
         gift.scanCount = (gift.scanCount || 0) + 1;
         await gift.save();
