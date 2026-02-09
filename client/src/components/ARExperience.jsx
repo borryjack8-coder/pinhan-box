@@ -192,20 +192,22 @@ const ARExperience = ({ videoUrl: propVideoUrl, targetFile: propTargetFile }) =>
 
     // 4. AR Scene
     return (
-        <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', zIndex: 999 }}>
+        <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', zIndex: 0 }}>
+            {/* Fix 1: Full Screen CSS */}
             <style dangerouslySetInnerHTML={{
                 __html: `
-                html, body { margin: 0; padding: 0; overflow: hidden !important; width: 100%; height: 100%; background: black; }
-                video#gift-video { opacity: 0; position:absolute; z-index:-10; } 
+                html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden !important; background: black; }
                 .mindar-ui-overlay { display: none !important; }
-                .a-canvas { width: 100% !important; height: 100% !important; top: 0 !important; left: 0 !important; position: absolute !important; }
+                .mindar-viewer-container { position: absolute !important; top: 0 !important; left: 0 !important; width: 100% !important; height: 100% !important; z-index: 0 !important; }
+                video#gift-video { opacity: 0; position: fixed; z-index: -99; top: 0; left: 0; }
             `}} />
 
+            {/* Fix 3: UI Update - Transparent Bottom Overlay */}
             <div style={{
-                position: 'absolute', top: 20, left: '50%', transform: 'translateX(-50%)', zIndex: 1000,
-                background: 'rgba(0,0,0,0.6)', padding: '8px 16px', borderRadius: '20px',
-                color: '#fff', fontFamily: 'sans-serif', fontSize: '14px', fontWeight: 'bold', pointerEvents: 'none',
-                boxShadow: '0 4px 6px rgba(0,0,0,0.1)', border: '1px solid rgba(255,255,255,0.2)'
+                position: 'fixed', bottom: '50px', left: '50%', transform: 'translateX(-50%)', zIndex: 1000,
+                background: 'rgba(0,0,0,0.5)', padding: '10px 20px', borderRadius: '30px',
+                color: '#fff', fontFamily: 'sans-serif', fontSize: '16px', fontWeight: 'bold', pointerEvents: 'none',
+                backdropFilter: 'blur(5px)', textAlign: 'center', minWidth: '200px'
             }}>
                 {status === "Kamera Tayyor - Marker qidiring" ? "Kamerani RASMGA tuting 📸" : status}
             </div>
@@ -236,6 +238,7 @@ const ARExperience = ({ videoUrl: propVideoUrl, targetFile: propTargetFile }) =>
 
                 <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
 
+                {/* Fix 2: Alignment (Zero position) */}
                 <a-entity mindar-image-target="targetIndex: 0">
                     <a-video
                         src="#gift-video"
@@ -243,6 +246,7 @@ const ARExperience = ({ videoUrl: propVideoUrl, targetFile: propTargetFile }) =>
                         height={videoHeight}
                         width="1"
                         rotation="0 0 0"
+                        loop="true"
                     ></a-video>
                 </a-entity>
             </a-scene>

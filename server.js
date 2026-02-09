@@ -46,9 +46,9 @@ mongoose.connect(process.env.MONGO_URI)
 // Initial Admin Seeding Script
 const seedAdmin = async () => {
     try {
-        const adminExists = await User.findOne({ role: 'admin' });
-        if (!adminExists) {
-            console.log('🌱 No Admin found. Seeding Super Admin...');
+        const adminUser = await User.findOne({ username: 'admin' });
+        if (!adminUser) {
+            console.log('🌱 No Admin found (username: admin). Creating Super Admin...');
             const newAdmin = new User({
                 username: 'admin',
                 password: 'admin123', // Will be hashed by pre-save hook
@@ -59,7 +59,7 @@ const seedAdmin = async () => {
             await newAdmin.save();
             console.log('✅ Super Admin Created: admin / admin123');
         } else {
-            console.log('Login with existing admin account.');
+            console.log('✅ Admin Account Verified (username: admin).');
         }
     } catch (err) {
         console.error('❌ Seeding Error:', err);
