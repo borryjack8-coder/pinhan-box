@@ -192,11 +192,11 @@ const ARExperience = ({ videoUrl: propVideoUrl, targetFile: propTargetFile }) =>
 
     // 4. AR Scene
     return (
-        <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', zIndex: 0 }}>
+        <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', zIndex: 0, overflow: 'hidden' }}>
             {/* Fix 1: Full Screen CSS */}
             <style dangerouslySetInnerHTML={{
                 __html: `
-                html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden !important; background: black; }
+                html, body { margin: 0; padding: 0 !important; width: 100%; height: 100%; overflow: hidden !important; background: black; }
                 .mindar-ui-overlay { display: none !important; }
                 .mindar-viewer-container { position: absolute !important; top: 0 !important; left: 0 !important; width: 100% !important; height: 100% !important; z-index: 0 !important; }
                 video#gift-video { opacity: 0; position: fixed; z-index: -99; top: 0; left: 0; }
@@ -204,10 +204,10 @@ const ARExperience = ({ videoUrl: propVideoUrl, targetFile: propTargetFile }) =>
 
             {/* Fix 3: UI Update - Transparent Bottom Overlay */}
             <div style={{
-                position: 'fixed', bottom: '50px', left: '50%', transform: 'translateX(-50%)', zIndex: 1000,
-                background: 'rgba(0,0,0,0.5)', padding: '10px 20px', borderRadius: '30px',
-                color: '#fff', fontFamily: 'sans-serif', fontSize: '16px', fontWeight: 'bold', pointerEvents: 'none',
-                backdropFilter: 'blur(5px)', textAlign: 'center', minWidth: '200px'
+                position: 'fixed', bottom: '80px', left: '50%', transform: 'translateX(-50%)', zIndex: 1000,
+                background: 'rgba(0,0,0,0.5)', padding: '12px 24px', borderRadius: '30px',
+                color: '#fff', fontFamily: 'sans-serif', fontSize: '18px', fontWeight: 'bold', pointerEvents: 'none',
+                backdropFilter: 'blur(5px)', textAlign: 'center', minWidth: '220px', whiteSpace: 'nowrap'
             }}>
                 {status === "Kamera Tayyor - Marker qidiring" ? "Kamerani RASMGA tuting 📸" : status}
             </div>
