@@ -211,6 +211,34 @@ app.post('/api/admin/shops/:id/credit', auth(['admin']), async (req, res) => {
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// Toggle Block Shop
+app.put('/api/admin/toggle-block/:id', auth(['admin']), async (req, res) => {
+    try {
+        const shop = await User.findById(req.params.id);
+        if (!shop) return res.status(404).json({ error: "Do'kon topilmadi" });
+
+        shop.isBlocked = !shop.isBlocked;
+        await shop.save();
+
+        res.json({ success: true, isBlocked: shop.isBlocked });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Update Shop Credentials
+app.put('/api/admin/update-credentials/:id', auth(['admin']), async (req, res) => {
+    try {
+        const { username, password } = req.body;
+        const shop = await User.findById(req.params.id);
+        if (!shop) return res.status(404).json({ error: "Do'kon topilmadi" });
+
+        if (username) shop.username = username;
+        if (password) shop.password = password; // Will be hashed by pre-save
+
+        await shop.save();
+        res.json({ success: true, message: "Ma'lumotlar yangilandi" });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // --- ANALYTICS ENDPOINT ---
 app.get('/api/admin/stats', auth(['admin']), async (req, res) => {
     try {
@@ -256,12 +284,25 @@ app.get('/api/admin/stats', auth(['admin']), async (req, res) => {
             weeklySales.push({ date: dateString, count: found ? found.count : 0 });
         }
 
+        // 5. Today's Breakdown (Who sold what today)
+        const todayBreakdown = await Gift.aggregate([
+            { $match: { createdAt: { $gte: startOfDay } } },
+            { $group: { _id: "$shopName", count: { $sum: 1 } } },
+            { $sort: { count: -1 } },
+            { $project: { name: "$_id", count: 1, _id: 0 } }
+        ]);
+
+        // 6. Full Shop List (To avoid extra API call)
+        const shops = await User.find({ role: 'shop' }).select('-password').sort({ createdAt: -1 });
+
         res.json({
             totalGifts,
             todayGifts,
             topShops,
             weeklySales,
-            storageStatus: "Cloudinary Usage: 45%" // Mock for now
+            todayBreakdown,
+            shops,
+            storageStatus: "Cloudinary Usage: 45%"
         });
 
     } catch (e) {
