@@ -2,14 +2,77 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 import toast, { Toaster } from 'react-hot-toast';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
 const AdminDashboard = () => {
     const navigate = useNavigate();
     const [shops, setShops] = useState([]);
+    const [stats, setStats] = useState(null);
+
+    // --- RESTORED STATE ---
+    const [selectedShop, setSelectedShop] = useState(null);
+    const [showCreditModal, setShowCreditModal] = useState(false);
+    const [creditAmount, setCreditAmount] = useState(10);
+    const [showCreateShop, setShowCreateShop] = useState(false);
+    const [newShop, setNewShop] = useState({ shopName: '', username: '', password: '' });
 
     // Edit Modal State
     const [showEditModal, setShowEditModal] = useState(false);
     const [editForm, setEditForm] = useState({ username: '', password: '' });
+
+    // --- RESTORED FUNCTIONS ---
+    useEffect(() => {
+        fetchData();
+    }, []);
+
+    const fetchData = async () => {
+        try {
+            const token = localStorage.getItem('token');
+            const headers = { Authorization: `Bearer ${token}` };
+
+            const [shopsRes, statsRes] = await Promise.all([
+                axios.get('/api/admin/shops', { headers }),
+                axios.get('/api/admin/stats', { headers })
+            ]);
+
+            setShops(shopsRes.data);
+            setStats(statsRes.data);
+        } catch (error) {
+            console.error(error);
+            if (error.response?.status === 401) navigate('/login');
+        }
+    };
+
+    const handleCreateShop = async () => {
+        try {
+            const token = localStorage.getItem('token');
+            await axios.post('/api/admin/shops', newShop, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            toast.success("Do'kon yaratildi!");
+            setShowCreateShop(false);
+            setNewShop({ shopName: '', username: '', password: '' });
+            fetchData();
+        } catch (err) {
+            toast.error(err.response?.data?.error || "Xatolik");
+        }
+    };
+
+    const handleAddCredit = async () => {
+        if (!selectedShop) return;
+        try {
+            const token = localStorage.getItem('token');
+            await axios.post(`/api/admin/shops/${selectedShop._id}/credit`,
+                { amount: creditAmount },
+                { headers: { Authorization: `Bearer ${token}` } }
+            );
+            toast.success("Balans to'ldirildi");
+            setShowCreditModal(false);
+            fetchData();
+        } catch (err) {
+            toast.error("Xatolik");
+        }
+    };
 
     const handleToggleBlock = async (shop) => {
         if (!confirm(`Rostdan ham ${shop.shopName} ni ${shop.isBlocked ? 'OCHMOQCHIMISIZ' : 'BLOKLAMOQCHIMISIZ'}?`)) return;
@@ -52,6 +115,67 @@ const AdminDashboard = () => {
                     CHIQISH
                 </button>
             </header>
+
+            {/* ANALYTICS GRID */}
+            {stats && (
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+                    {/* Stat Cards */}
+                    <div className="md:col-span-4 grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div className="bg-zinc-800 p-6 rounded-2xl border border-zinc-700 shadow-lg">
+                            <h3 className="text-zinc-500 text-sm font-bold uppercase">Bugungi Savdo</h3>
+                            <p className="text-4xl font-bold text-white mt-2">{stats.todayGifts}</p>
+                        </div>
+                        <div className="bg-zinc-800 p-6 rounded-2xl border border-zinc-700 shadow-lg">
+                            <h3 className="text-zinc-500 text-sm font-bold uppercase">Jami Savdo</h3>
+                            <p className="text-4xl font-bold text-pinhan-gold mt-2">{stats.totalGifts}</p>
+                        </div>
+                        <div className="bg-zinc-800 p-6 rounded-2xl border border-zinc-700 shadow-lg">
+                            <h3 className="text-zinc-500 text-sm font-bold uppercase">Faol Do'konlar</h3>
+                            <p className="text-4xl font-bold text-green-500 mt-2">
+                                {shops.filter(s => !s.isBlocked).length} <span className="text-lg text-zinc-500">/ {shops.length}</span>
+                            </p>
+                        </div>
+                    </div>
+
+                    {/* Main Chart */}
+                    <div className="md:col-span-3 bg-zinc-800 p-6 rounded-2xl border border-zinc-700 shadow-lg">
+                        <h3 className="text-white font-bold mb-4">Haftalik Dinamika</h3>
+                        <div className="h-64">
+                            <ResponsiveContainer width="100%" height="100%">
+                                <BarChart data={stats.weeklySales}>
+                                    <CartesianGrid strokeDasharray="3 3" stroke="#333" />
+                                    <XAxis dataKey="date" stroke="#666" fontSize={12} tickFormatter={str => str.slice(5)} />
+                                    <YAxis stroke="#666" fontSize={12} />
+                                    <Tooltip
+                                        contentStyle={{ backgroundColor: '#000', border: '1px solid #333' }}
+                                        labelStyle={{ color: '#888' }}
+                                    />
+                                    <Bar dataKey="count" fill="#FFD700" radius={[4, 4, 0, 0]} />
+                                </BarChart>
+                            </ResponsiveContainer>
+                        </div>
+                    </div>
+
+                    {/* Leaderboard */}
+                    <div className="bg-zinc-800 p-6 rounded-2xl border border-zinc-700 shadow-lg">
+                        <h3 className="text-white font-bold mb-4">🏆 Top Do'konlar</h3>
+                        <div className="space-y-4">
+                            {stats.topShops.map((shop, i) => (
+                                <div key={i} className="flex justify-between items-center border-b border-zinc-700 pb-2 last:border-0 hover:bg-zinc-700/50 p-2 rounded transition-colors">
+                                    <div className="flex items-center gap-3">
+                                        <span className={`text-sm font-bold w-6 h-6 flex items-center justify-center rounded-full ${i === 0 ? 'bg-yellow-500 text-black' : i === 1 ? 'bg-zinc-400 text-black' : i === 2 ? 'bg-orange-700 text-black' : 'bg-zinc-700 text-zinc-400'}`}>
+                                            {i + 1}
+                                        </span>
+                                        <span className="font-medium text-zinc-300 text-sm truncate max-w-[100px]" title={shop.name}>{shop.name}</span>
+                                    </div>
+                                    <span className="font-bold text-white">{shop.count}</span>
+                                </div>
+                            ))}
+                            {stats.topShops.length === 0 && <p className="text-zinc-500 text-sm">Ma'lumot yo'q</p>}
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* TOP ACTION */}
             <div className="mb-8">

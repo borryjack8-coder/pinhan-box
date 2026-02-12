@@ -206,6 +206,65 @@ app.post('/api/admin/shops/:id/credit', auth(['admin']), async (req, res) => {
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// --- ANALYTICS ENDPOINT ---
+app.get('/api/admin/stats', auth(['admin']), async (req, res) => {
+    try {
+        // 1. Total Gifts
+        const totalGifts = await Gift.countDocuments();
+
+        // 2. Today's Gifts
+        const startOfDay = new Date();
+        startOfDay.setHours(0, 0, 0, 0);
+        const todayGifts = await Gift.countDocuments({ createdAt: { $gte: startOfDay } });
+
+        // 3. Top 5 Shops
+        const topShops = await Gift.aggregate([
+            { $group: { _id: "$shopName", count: { $sum: 1 } } },
+            { $sort: { count: -1 } },
+            { $limit: 5 },
+            { $project: { name: "$_id", count: 1, _id: 0 } }
+        ]);
+
+        // 4. Weekly Sales (Last 7 Days)
+        const sevenDaysAgo = new Date();
+        sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6);
+        sevenDaysAgo.setHours(0, 0, 0, 0);
+
+        const weeklyData = await Gift.aggregate([
+            { $match: { createdAt: { $gte: sevenDaysAgo } } },
+            {
+                $group: {
+                    _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } },
+                    count: { $sum: 1 }
+                }
+            },
+            { $sort: { _id: 1 } }
+        ]);
+
+        // Fill in missing days with 0
+        const weeklySales = [];
+        for (let i = 0; i < 7; i++) {
+            const d = new Date();
+            d.setDate(d.getDate() - (6 - i));
+            const dateString = d.toISOString().split('T')[0];
+            const found = weeklyData.find(item => item._id === dateString);
+            weeklySales.push({ date: dateString, count: found ? found.count : 0 });
+        }
+
+        res.json({
+            totalGifts,
+            todayGifts,
+            topShops,
+            weeklySales,
+            storageStatus: "Cloudinary Usage: 45%" // Mock for now
+        });
+
+    } catch (e) {
+        console.error("Analytics Error:", e);
+        res.status(500).json({ error: e.message });
+    }
+});
+
 // --- SHOP ROUTES (GIFT CREATION) ---
 
 // Upload Helpers (Requires Auth)
