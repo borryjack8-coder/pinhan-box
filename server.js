@@ -89,7 +89,12 @@ const storage = new CloudinaryStorage({
 const upload = multer({ storage: storage });
 
 // --- 4. MIDDLEWARE ---
-app.use(cors());
+app.use(cors({
+    origin: ['http://localhost:5173', 'http://localhost:3000', 'https://pinhan-box.onrender.com'],
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization']
+}));
 app.use(express.json());
 
 // Auth Middleware (RBAC)
@@ -247,7 +252,7 @@ app.get('/api/admin/stats', auth(['admin']), async (req, res) => {
             const d = new Date();
             d.setDate(d.getDate() - (6 - i));
             const dateString = d.toISOString().split('T')[0];
-            const found = weeklyData.find(item => item._id === dateString);
+            const found = weeklyData.find(item => item && item._id === dateString); // Added null check
             weeklySales.push({ date: dateString, count: found ? found.count : 0 });
         }
 
