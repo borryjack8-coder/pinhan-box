@@ -14,21 +14,15 @@ const ShopDashboard = () => {
     const [form, setForm] = useState({ clientName: '', videoUrl: '', markerUrl: '', pinCode: '', visibility: 'secret' });
     const [isUploading, setIsUploading] = useState(false);
     const [isGenerating, setIsGenerating] = useState(false);
+    const [compiling, setCompiling] = useState(false);
+    const [mindFile, setMindFile] = useState(null);
     const [createdGift, setCreatedGift] = useState(null);
     const [progressMsg, setProgressMsg] = useState('');
 
-    // --- 1. INITIAL FETCH & LOAD COMPILER ---
+    // --- 1. INITIAL FETCH ---
     useEffect(() => {
         fetchData();
-
-        // Load MindAR Compiler Script
-        if (!window.MINDAR) {
-            const script = document.createElement('script');
-            script.src = "https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image.prod.js";
-            script.async = true;
-            script.onload = () => console.log("MindAR Compiler Loaded");
-            document.body.appendChild(script);
-        }
+        // The script is now loaded in index.html for better reliability
     }, []);
 
     const fetchData = async () => {
@@ -80,8 +74,26 @@ const ShopDashboard = () => {
                 headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'multipart/form-data' }
             });
             console.log("Upload Success:", res.data);
-            setForm(prev => ({ ...prev, [type]: res.data.url }));
-            toast.success("Fayl yuklandi");
+            const url = res.data.url;
+            setForm(prev => ({ ...prev, [type]: url }));
+            toast.success(type === 'videoUrl' ? "Video yuklandi" : "Rasm yuklandi");
+
+            // --- AUTO COMPILER TRIGGER ---
+            if (type === 'markerUrl') {
+                console.log("Auto-triggering .mind compilation...");
+                setCompiling(true);
+                try {
+                    const compiledFile = await compileMindFile(url);
+                    setMindFile(compiledFile);
+                    console.log("Compilation Successful:", compiledFile.name);
+                    toast.success("AR Tracking tayyorlandi ✅");
+                } catch (compileErr) {
+                    console.error("Auto Compile Error:", compileErr);
+                    toast.error("AR Tracking tayyorlashda xatolik!");
+                } finally {
+                    setCompiling(false);
+                }
+            }
         } catch (err) {
             console.error("Upload Error:", err);
             const errMsg = err.response?.data?.error || err.message || "Yuklashda xatolik";
@@ -108,7 +120,7 @@ const ShopDashboard = () => {
                     console.log("Starting Compilation...");
                     await compiler.compileImageTargets([img], (progress) => {
                         console.log("Compile Progress:", progress);
-                        setProgressMsg(`Tayyorlanmoqda... ${(progress).toFixed(0)}%`);
+                        setProgressMsg(`Tahrirlanmoqda... ${(progress).toFixed(0)}%`);
                     });
 
                     const exportedBuffer = await compiler.exportData();
@@ -129,6 +141,8 @@ const ShopDashboard = () => {
         if (!form.clientName) return alert("Iltimos, Mijoz ismini kiriting!");
         if (!form.videoUrl) return alert("Video yuklanmagan!");
         if (!form.markerUrl) return alert("Rasm (Marker) yuklanmagan!");
+        if (!mindFile && compiling) return alert("AR Tracking tayyorlanmoqda, iltimos kuting...");
+        if (!mindFile) return alert("AR tracking fayli topilmadi. Rasm yuklashni qaytadan urinib ko'ring.");
 
         if (user.balance <= 0) {
             alert("Sizda yetarli limit mavjud emas! Administratorga murojaat qiling.");
@@ -140,15 +154,8 @@ const ShopDashboard = () => {
         const token = localStorage.getItem('token');
 
         try {
-            // STEP A: Compile .mind file in Browser
-            console.log("Step 1: Client-Side Compilation...");
-            setProgressMsg("AR Fayl tayyorlanmoqda... (Brauzerda)");
-
-            const mindFile = await compileMindFile(form.markerUrl);
-            console.log("Mind File Compiled:", mindFile.name, mindFile.size);
-
-            // STEP B: Upload .mind file
-            console.log("Step 2: Uploading .mind file...");
+            // STEP A: Upload .mind file (Pre-compiled in handleFileUpload)
+            console.log("Step 1: Uploading pre-compiled .mind file...");
             setProgressMsg("AR Fayl yuklanmoqda...");
 
             const mindFormData = new FormData();
@@ -160,8 +167,8 @@ const ShopDashboard = () => {
             const mindUrl = uploadRes.data.mindUrl;
             console.log("Mind File Uploaded:", mindUrl);
 
-            // STEP C: Create Gift (Transaction)
-            console.log("Step 3: Creating Gift Transaction...");
+            // STEP B: Create Gift (Transaction)
+            console.log("Step 2: Creating Gift Transaction...");
             setProgressMsg("Saqlanmoqda...");
 
             const payload = { ...form, targetFile: mindUrl };
@@ -177,6 +184,7 @@ const ShopDashboard = () => {
 
             setIsCreating(false);
             setForm({ clientName: '', videoUrl: '', markerUrl: '', pinCode: '', visibility: 'secret' });
+            setMindFile(null);
             fetchData();
 
         } catch (error) {
@@ -263,6 +271,8 @@ const ShopDashboard = () => {
                                 <span className="text-sm">🖼️ Rasm Yuklash</span>
                                 <input type="file" accept="image/*" className="hidden" onChange={e => handleFileUpload(e, 'markerUrl')} />
                                 {isUploading && <span className="block text-xs text-yellow-500 mt-1">Yuklanmoqda...</span>}
+                                {compiling && <span className="block text-xs text-pinhan-gold mt-1 animate-pulse">Analiz qilinmoqda...</span>}
+                                {mindFile && !compiling && <span className="block text-xs text-green-500 mt-1">AR Tayyor ✅</span>}
                             </label>
                         </div>
 
@@ -270,10 +280,10 @@ const ShopDashboard = () => {
                             <button onClick={() => setIsCreating(false)} className="flex-1 py-3 rounded bg-zinc-800">Bekor qilish</button>
                             <button
                                 onClick={handleCreate}
-                                disabled={isUploading || isGenerating}
-                                className={`flex-1 py-3 rounded text-black font-bold transition-all ${isGenerating ? 'bg-yellow-800 cursor-wait' : 'bg-pinhan-gold'}`}
+                                disabled={isUploading || isGenerating || compiling}
+                                className={`flex-1 py-3 rounded text-black font-bold transition-all ${isGenerating || compiling ? 'bg-yellow-800 cursor-wait' : 'bg-pinhan-gold'}`}
                             >
-                                {isGenerating ? (progressMsg || 'YARATILMOQDA...') : 'YARATISH (-1 CR)'}
+                                {isGenerating ? (progressMsg || 'YARATILMOQDA...') : (compiling ? 'ANALIZ QILINMOQDA...' : 'YARATISH (-1 CR)')}
                             </button>
                         </div>
                     </div>
