@@ -9,6 +9,7 @@ const ARExperience = ({ videoUrl: propVideoUrl, targetFile: propTargetFile }) =>
     const [arError, setArError] = useState(null);
     const [started, setStarted] = useState(false);
     const [videoRatio, setVideoRatio] = useState(1);
+    const [targetFound, setTargetFound] = useState(false);
 
     // Data State
     const [videoUrl, setVideoUrl] = useState(propVideoUrl);
@@ -69,10 +70,12 @@ const ARExperience = ({ videoUrl: propVideoUrl, targetFile: propTargetFile }) =>
         // Target Events for Play/Pause logic
         const onTargetFound = () => {
             console.log("🎯 Target Found");
+            setTargetFound(true);
             if (videoEl) videoEl.play();
         };
         const onTargetLost = () => {
             console.log("💨 Target Lost");
+            setTargetFound(false);
             if (videoEl) videoEl.pause();
         };
 
@@ -153,17 +156,19 @@ const ARExperience = ({ videoUrl: propVideoUrl, targetFile: propTargetFile }) =>
 
             {/* 2. LOADING STATE */}
             {loadingData && (
-                <div className="absolute inset-0 z-[10000] bg-black flex items-center justify-center text-white font-bold">
-                    Yuklanmoqda...
+                <div className="absolute inset-0 z-[10000] bg-black flex flex-col items-center justify-center text-white">
+                    <div className="w-12 h-12 border-4 border-pinhan-gold border-t-transparent rounded-full animate-spin mb-4"></div>
+                    <p className="font-bold text-pinhan-gold tracking-widest text-xs">MA'LUMOTLAR YUKLANMOQDA...</p>
                 </div>
             )}
 
             {/* 3. ERROR STATE */}
             {!loadingData && arError && (
                 <div className="absolute inset-0 z-[10000] bg-black flex flex-col items-center justify-center text-white p-6 text-center">
-                    <h1 className="text-red-500 text-2xl mb-4">⚠️ Xatolik</h1>
-                    <p className="mb-6">{arError}</p>
-                    <button onClick={() => window.location.reload()} className="bg-white text-black px-6 py-3 rounded-full font-bold">Qayta Yuklash</button>
+                    <h1 className="text-red-500 text-3xl font-black mb-4 uppercase italic">Xatolik</h1>
+                    <p className="text-zinc-400 mb-8 max-w-xs">{arError}</p>
+                    <button onClick={() => window.location.reload()} className="bg-white text-black px-8 py-3 rounded-xl font-bold transition-transform hover:scale-105">Qayta Yuklash</button>
+                    <button onClick={() => navigate('/')} className="mt-4 text-zinc-500 underline text-sm">Bosh sahifaga qaytish</button>
                 </div>
             )}
 
@@ -207,7 +212,7 @@ const ARExperience = ({ videoUrl: propVideoUrl, targetFile: propTargetFile }) =>
                     )}
 
                     {/* SCAN GUIDE (Refined Bracket) */}
-                    {arReady && (
+                    {arReady && !targetFound && (
                         <div className="absolute inset-0 z-[500] pointer-events-none flex items-center justify-center">
                             <div className="w-[75vw] h-[75vw] max-w-[380px] max-h-[380px] border border-white/10 rounded-[40px] relative">
                                 {/* Corners with Glow */}
@@ -243,7 +248,7 @@ const ARExperience = ({ videoUrl: propVideoUrl, targetFile: propTargetFile }) =>
                         <a-entity mindar-image-target="targetIndex: 0">
                             <a-video
                                 src="#ar-video"
-                                position="0 0 0"
+                                position="0 0 0.1"
                                 height={videoRatio}
                                 width="1"
                                 rotation="0 0 0"
