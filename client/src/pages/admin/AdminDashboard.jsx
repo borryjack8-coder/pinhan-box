@@ -99,7 +99,7 @@ const AdminDashboard = () => {
     if (loading && !data.shops.length) return <div className="min-h-screen bg-zinc-950 flex items-center justify-center text-white">Yuklanmoqda...</div>;
 
     return (
-        <div className="min-h-screen bg-zinc-950 text-zinc-100 p-6 font-sans">
+        <div className="h-screen bg-zinc-950 text-zinc-100 p-6 font-sans overflow-y-auto pb-20">
             <Toaster position="top-right" />
 
             {/* HEADER */}
