@@ -192,13 +192,32 @@ const ARExperience = ({ videoUrl: propVideoUrl, targetFile: propTargetFile }) =>
 
     // 4. AR Scene
     return (
-        <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', zIndex: 0, overflow: 'hidden' }}>
-            {/* Fix 1: Full Screen CSS */}
+        <div id="ar-container" style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', zIndex: 0, overflow: 'hidden' }}>
+            {/* Fix 1: Full Screen CSS - Robust Reset */}
             <style dangerouslySetInnerHTML={{
                 __html: `
-                html, body { margin: 0; padding: 0 !important; width: 100%; height: 100%; overflow: hidden !important; background: black; }
+                html, body { 
+                    margin: 0 !important; 
+                    padding: 0 !important; 
+                    width: 100% !important; 
+                    height: 100% !important; 
+                    overflow: hidden !important; 
+                    background: black !important; 
+                }
+                #root {
+                    width: 100%;
+                    height: 100%;
+                    overflow: hidden;
+                }
                 .mindar-ui-overlay { display: none !important; }
-                .mindar-viewer-container { position: absolute !important; top: 0 !important; left: 0 !important; width: 100% !important; height: 100% !important; z-index: 0 !important; }
+                .mindar-viewer-container { 
+                    position: absolute !important; 
+                    top: 0 !important; 
+                    left: 0 !important; 
+                    width: 100% !important; 
+                    height: 100% !important; 
+                    z-index: 0 !important; 
+                }
                 video#gift-video { opacity: 0; position: fixed; z-index: -99; top: 0; left: 0; }
             `}} />
 
@@ -231,6 +250,8 @@ const ARExperience = ({ videoUrl: propVideoUrl, targetFile: propTargetFile }) =>
                         playsInline
                         webkit-playsinline="true"
                         loop="true"
+                        autoPlay
+                        muted
                         crossOrigin="anonymous"
                         onLoadedMetadata={handleMetadata}
                     ></video>
@@ -238,14 +259,14 @@ const ARExperience = ({ videoUrl: propVideoUrl, targetFile: propTargetFile }) =>
 
                 <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
 
-                {/* Fix 2: Alignment (Zero position) */}
+                {/* Fix 2: Alignment (Zero position, Flat Rotation) */}
                 <a-entity mindar-image-target="targetIndex: 0">
                     <a-video
                         src="#gift-video"
                         position="0 0 0"
                         height={videoHeight}
                         width="1"
-                        rotation="0 0 0"
+                        rotation="-90 0 0"
                         loop="true"
                     ></a-video>
                 </a-entity>
