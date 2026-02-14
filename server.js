@@ -79,10 +79,14 @@ cloudinary.config({
 
 const storage = new CloudinaryStorage({
     cloudinary: cloudinary,
-    params: {
-        folder: 'pinhan_gifts',
-        resource_type: 'auto',
-        public_id: (req, file) => Date.now() + '-' + file.originalname,
+    params: async (req, file) => {
+        // Force RAW for .mind files to prevent corruption
+        const isMindFile = file.originalname.toLowerCase().endsWith('.mind');
+        return {
+            folder: 'pinhan_gifts',
+            resource_type: isMindFile ? 'raw' : 'auto',
+            public_id: Date.now() + '-' + file.originalname,
+        };
     },
 });
 
