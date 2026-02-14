@@ -17,6 +17,10 @@ const giftSchema = new mongoose.Schema({
     },
     targetFile: {
         type: String,
+        // required: true // We can relax this or keep it, but mindFileUrl is the new main one.
+    },
+    mindFileUrl: {
+        type: String,
         required: true
     }, // .mind file url
 

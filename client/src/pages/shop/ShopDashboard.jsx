@@ -11,18 +11,21 @@ const ShopDashboard = () => {
     const [isCreating, setIsCreating] = useState(false);
 
     // Form State
-    const [form, setForm] = useState({ clientName: '', videoUrl: '', markerUrl: '', pinCode: '', visibility: 'secret' });
-    const [isUploading, setIsUploading] = useState(false);
+    const [form, setForm] = useState({
+        clientName: '',
+        pinCode: '',
+        visibility: 'secret',
+        video: null,
+        image: null,
+        mindFile: null
+    });
     const [isGenerating, setIsGenerating] = useState(false);
-    const [compiling, setCompiling] = useState(false);
-    const [mindFile, setMindFile] = useState(null);
-    const [createdGift, setCreatedGift] = useState(null);
     const [progressMsg, setProgressMsg] = useState('');
+    const [createdGift, setCreatedGift] = useState(null);
 
     // --- 1. INITIAL FETCH ---
     useEffect(() => {
         fetchData();
-        // The script is now loaded in index.html for better reliability
     }, []);
 
     const fetchData = async () => {
@@ -51,98 +54,12 @@ const ShopDashboard = () => {
         navigate('/login');
     };
 
-    // --- 3. UPLOAD HANDLER ---
-    const handleFileUpload = async (e, type) => {
-        const file = e.target.files[0];
-        if (!file) return;
-
-        // Validation for Image Size (Client Side)
-        if (type === 'markerUrl' && file.size > 5 * 1024 * 1024) {
-            alert("Rasm hajmi juda katta! 5MB dan kichik rasm yuklang.");
-            return;
-        }
-
-        console.log(`Starting Upload [${type}]:`, file.name, `Size: ${(file.size / 1024 / 1024).toFixed(2)} MB`);
-        setIsUploading(true);
-
-        const formData = new FormData();
-        formData.append('file', file);
-        const token = localStorage.getItem('token');
-
-        try {
-            const res = await axios.post('/api/shop/upload', formData, {
-                headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'multipart/form-data' }
-            });
-            console.log("Upload Success:", res.data);
-            const url = res.data.url;
-            setForm(prev => ({ ...prev, [type]: url }));
-            toast.success(type === 'videoUrl' ? "Video yuklandi" : "Rasm yuklandi");
-
-            // --- AUTO COMPILER TRIGGER ---
-            if (type === 'markerUrl') {
-                console.log("Auto-triggering .mind compilation...");
-                setCompiling(true);
-                try {
-                    const compiledFile = await compileMindFile(url);
-                    setMindFile(compiledFile);
-                    console.log("Compilation Successful:", compiledFile.name);
-                    toast.success("AR Tracking tayyorlandi ✅");
-                } catch (compileErr) {
-                    console.error("Auto Compile Error:", compileErr);
-                    toast.error("AR Tracking tayyorlashda xatolik!");
-                } finally {
-                    setCompiling(false);
-                }
-            }
-        } catch (err) {
-            console.error("Upload Error:", err);
-            const errMsg = err.response?.data?.error || err.message || "Yuklashda xatolik";
-            alert(`XATOLIK: ${errMsg}`);
-            toast.error(errMsg);
-        } finally {
-            setIsUploading(false);
-        }
-    };
-
-    // --- HELPER: CLIENT-SIDE COMPILATION ---
-    const compileMindFile = async (imageUrl) => {
-        return new Promise((resolve, reject) => {
-            if (!window.MINDAR || !window.MINDAR.IMAGE) {
-                reject(new Error("MindAR Compiler script not loaded yet. Please refresh."));
-                return;
-            }
-
-            const img = new Image();
-            img.crossOrigin = "Anonymous";
-            img.onload = async () => {
-                try {
-                    const compiler = new window.MINDAR.IMAGE.Compiler();
-                    console.log("Starting Compilation...");
-                    await compiler.compileImageTargets([img], (progress) => {
-                        console.log("Compile Progress:", progress);
-                        setProgressMsg(`Tahrirlanmoqda... ${(progress).toFixed(0)}%`);
-                    });
-
-                    const exportedBuffer = await compiler.exportData();
-                    const blob = new Blob([exportedBuffer]);
-                    const file = new File([blob], "targets.mind", { type: "application/octet-stream" });
-                    resolve(file);
-                } catch (err) {
-                    reject(err);
-                }
-            };
-            img.onerror = (err) => reject(new Error("Failed to load image for compilation."));
-            img.src = imageUrl;
-        });
-    };
-
-    // --- 4. CREATE GIFT FLOW (CLIENT-SIDE) ---
+    // --- 3. CREATE GIFT FLOW (MANUAL UPLOAD) ---
     const handleCreate = async () => {
         if (!form.clientName) return alert("Iltimos, Mijoz ismini kiriting!");
-        if (!form.videoUrl) return alert("Video yuklanmagan!");
-        if (!form.markerUrl) return alert("Rasm (Marker) yuklanmagan!");
-        if (!mindFile && compiling) return alert("AR Tracking tayyorlanmoqda, iltimos kuting...");
-        if (!mindFile) return alert("AR tracking fayli topilmadi. Rasm yuklashni qaytadan urinib ko'ring.");
+        if (!form.video) return alert("Video yuklanmagan!");
+        if (!form.image) return alert("Rasm (Marker) yuklanmagan!");
+        if (!form.mindFile) return alert("Mind fayl (.mind) yuklanmagan!");
 
         if (user.balance <= 0) {
             alert("Sizda yetarli limit mavjud emas! Administratorga murojaat qiling.");
@@ -150,41 +67,37 @@ const ShopDashboard = () => {
         }
 
         setIsGenerating(true);
-        setProgressMsg("Boshlanmoqda...");
+        setProgressMsg("Yuklanmoqda...");
         const token = localStorage.getItem('token');
 
         try {
-            // STEP A: Upload .mind file (Pre-compiled in handleFileUpload)
-            console.log("Step 1: Uploading pre-compiled .mind file...");
-            setProgressMsg("AR Fayl yuklanmoqda...");
+            const formData = new FormData();
+            formData.append('clientName', form.clientName);
+            formData.append('visibility', form.visibility === 'public' ? 'public' : 'secret');
+            if (form.pinCode) formData.append('pinCode', form.pinCode);
 
-            const mindFormData = new FormData();
-            mindFormData.append('file', mindFile);
+            // Append Files
+            formData.append('video', form.video);
+            formData.append('image', form.image);
+            formData.append('mindFile', form.mindFile);
 
-            const uploadRes = await axios.post('/api/shop/upload-mind', mindFormData, {
-                headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'multipart/form-data' }
+            console.log("Sending Gift Data (Multipart)...");
+
+            const createRes = await axios.post('/api/shop/gifts', formData, {
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                    'Content-Type': 'multipart/form-data'
+                }
             });
-            const mindUrl = uploadRes.data.mindUrl;
-            console.log("Mind File Uploaded:", mindUrl);
 
-            // STEP B: Create Gift (Transaction)
-            console.log("Step 2: Creating Gift Transaction...");
-            setProgressMsg("Saqlanmoqda...");
-
-            const payload = { ...form, targetFile: mindUrl };
-            const createRes = await axios.post('/api/shop/gifts', payload, {
-                headers: { Authorization: `Bearer ${token}` }
-            });
             console.log("Gift Created:", createRes.data);
-
             setCreatedGift(createRes.data.gift);
 
             alert("Muvaffaqiyatli yaratildi! Balansdan 1 limit yechildi.");
             toast.success("Sovg'a yaratildi (-1 Credit)");
 
             setIsCreating(false);
-            setForm({ clientName: '', videoUrl: '', markerUrl: '', pinCode: '', visibility: 'secret' });
-            setMindFile(null);
+            setForm({ clientName: '', pinCode: '', visibility: 'secret', video: null, image: null, mindFile: null });
             fetchData();
 
         } catch (error) {
@@ -259,20 +172,39 @@ const ShopDashboard = () => {
                             onChange={e => setForm({ ...form, pinCode: e.target.value })}
                         />
 
-                        {/* File Inputs */}
-                        <div className="grid grid-cols-2 gap-4">
-                            <label className={`block p-4 rounded border text-center cursor-pointer ${form.videoUrl ? 'border-green-500 text-green-500' : 'border-dashed border-zinc-600'}`}>
-                                <span className="text-sm">🎬 Video Yuklash</span>
-                                <input type="file" accept="video/*" className="hidden" onChange={e => handleFileUpload(e, 'videoUrl')} />
-                                {isUploading && <span className="block text-xs text-yellow-500 mt-1">Yuklanmoqda...</span>}
+                        {/* File Inputs (Manual Upload) */}
+                        <div className="space-y-4">
+                            {/* Video Input */}
+                            <label className={`block p-4 rounded border text-center cursor-pointer ${form.video ? 'border-green-500 text-green-500' : 'border-dashed border-zinc-600'}`}>
+                                <span className="text-sm">🎬 Video Yuklash {form.video && '✅'}</span>
+                                <input
+                                    type="file"
+                                    accept="video/*"
+                                    className="hidden"
+                                    onChange={e => setForm({ ...form, video: e.target.files[0] })}
+                                />
                             </label>
 
-                            <label className={`block p-4 rounded border text-center cursor-pointer ${form.markerUrl ? 'border-green-500 text-green-500' : 'border-dashed border-zinc-600'}`}>
-                                <span className="text-sm">🖼️ Rasm Yuklash</span>
-                                <input type="file" accept="image/*" className="hidden" onChange={e => handleFileUpload(e, 'markerUrl')} />
-                                {isUploading && <span className="block text-xs text-yellow-500 mt-1">Yuklanmoqda...</span>}
-                                {compiling && <span className="block text-xs text-pinhan-gold mt-1 animate-pulse">Analiz qilinmoqda...</span>}
-                                {mindFile && !compiling && <span className="block text-xs text-green-500 mt-1">AR Tayyor ✅</span>}
+                            {/* Image Input */}
+                            <label className={`block p-4 rounded border text-center cursor-pointer ${form.image ? 'border-green-500 text-green-500' : 'border-dashed border-zinc-600'}`}>
+                                <span className="text-sm">🖼️ Rasm (Marker) Yuklash {form.image && '✅'}</span>
+                                <input
+                                    type="file"
+                                    accept="image/*"
+                                    className="hidden"
+                                    onChange={e => setForm({ ...form, image: e.target.files[0] })}
+                                />
+                            </label>
+
+                            {/* Mind File Input */}
+                            <label className={`block p-4 rounded border text-center cursor-pointer ${form.mindFile ? 'border-green-500 text-green-500' : 'border-dashed border-zinc-600'}`}>
+                                <span className="text-sm">🧠 Mind Fayl (.mind) Yuklash {form.mindFile && '✅'}</span>
+                                <input
+                                    type="file"
+                                    accept=".mind"
+                                    className="hidden"
+                                    onChange={e => setForm({ ...form, mindFile: e.target.files[0] })}
+                                />
                             </label>
                         </div>
 
@@ -280,10 +212,10 @@ const ShopDashboard = () => {
                             <button onClick={() => setIsCreating(false)} className="flex-1 py-3 rounded bg-zinc-800">Bekor qilish</button>
                             <button
                                 onClick={handleCreate}
-                                disabled={isUploading || isGenerating || compiling}
-                                className={`flex-1 py-3 rounded text-black font-bold transition-all ${isGenerating || compiling ? 'bg-yellow-800 cursor-wait' : 'bg-pinhan-gold'}`}
+                                disabled={isGenerating}
+                                className={`flex-1 py-3 rounded text-black font-bold transition-all ${isGenerating ? 'bg-yellow-800 cursor-wait' : 'bg-pinhan-gold'}`}
                             >
-                                {isGenerating ? (progressMsg || 'YARATILMOQDA...') : (compiling ? 'ANALIZ QILINMOQDA...' : 'YARATISH (-1 CR)')}
+                                {isGenerating ? (progressMsg || 'YARATILMOQDA...') : 'YARATISH (-1 CR)'}
                             </button>
                         </div>
                     </div>

@@ -40,7 +40,7 @@ const ARExperience = ({ videoUrl: propVideoUrl, targetFile: propTargetFile }) =>
                 // Cloudinary Optimization
                 const optVideo = data.videoUrl.replace('/upload/', '/upload/f_auto,q_auto/');
                 setVideoUrl(optVideo);
-                setTargetFile(data.targetFile);
+                setTargetFile(data.mindFileUrl || data.targetFile);
             })
             .catch(err => setArError(err.message))
             .finally(() => setLoadingData(false));
@@ -130,7 +130,22 @@ const ARExperience = ({ videoUrl: propVideoUrl, targetFile: propTargetFile }) =>
         <div className="fixed inset-0 bg-black overflow-hidden" style={{ zIndex: 0 }}>
             {/* --- GLOBAL CSS FIXES --- */}
             <style>{`
-                html, body, #root { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: black; }
+                html, body, #root { 
+                    margin: 0; 
+                    padding: 0; 
+                    width: 100%; 
+                    height: 100%; 
+                    overflow: hidden; 
+                    background: black; 
+                }
+                .mindar-ui-overlay, .a-canvas { 
+                    position: absolute !important; 
+                    width: 100% !important; 
+                    height: 100% !important; 
+                    top: 0 !important; 
+                    left: 0 !important; 
+                    z-index: 0; 
+                }
                 .mindar-ui-overlay { display: none !important; }
                 @keyframes pulse-glow {
                     0%, 100% { box-shadow: 0 0 20px rgba(234, 179, 8, 0.4); transform: scale(1); }
@@ -232,7 +247,7 @@ const ARExperience = ({ videoUrl: propVideoUrl, targetFile: propTargetFile }) =>
 
                     <a-scene
                         ref={sceneRef}
-                        mindar-image={`imageTargetSrc: ${targetFile}; uiLoading: no; uiScanning: no; uiError: no; filterMinCF:0.0001; filterBeta: 0.001;`}
+                        mindar-image={`imageTargetSrc: ${targetFile}; autoStart: true; uiLoading: no; uiScanning: no; uiError: no; filterMinCF:0.0005; filterBeta: 0.01; missTolerance: 10; warmupTolerance: 5;`}
                         color-space="sRGB"
                         renderer="colorManagement: true, physicallyCorrectLights: false; antialias: true;"
                         vr-mode-ui="enabled: false"

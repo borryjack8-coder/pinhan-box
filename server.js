@@ -325,9 +325,16 @@ app.post('/api/shop/upload-mind', auth(['admin', 'shop']), upload.single('file')
 });
 
 // CREATE GIFT (THE TRANSACTION)
-app.post('/api/shop/gifts', auth(['admin', 'shop']), async (req, res) => {
+// Updated to accept multipart/form-data with 3 files
+const cpUpload = upload.fields([
+    { name: 'image', maxCount: 1 },
+    { name: 'video', maxCount: 1 },
+    { name: 'mindFile', maxCount: 1 }
+]);
 
-    console.log("--- START: Create Gift Transaction ---");
+app.post('/api/shop/gifts', auth(['admin', 'shop']), cpUpload, async (req, res) => {
+
+    console.log("--- START: Create Gift Transaction (Multipart) ---");
     console.log("1. Request received");
     console.log("2. User from Request:", req.user ? `${req.user.username} (${req.user._id})` : "UNDEFINED");
 
@@ -336,21 +343,25 @@ app.post('/api/shop/gifts', auth(['admin', 'shop']), async (req, res) => {
         return res.status(401).json({ message: "AUTH ERROR: User not found in request. Middleware failed." });
     }
 
+    // Check files
+    if (!req.files || !req.files['mindFile']) {
+        return res.status(400).json({ message: "Mind File (.mind) is required!" });
+    }
+
     const session = await mongoose.startSession();
     session.startTransaction();
     try {
         const user = req.user;
 
-        // 1. Check Credit (Atomic check not possible on query, but redundant with update below)
-        // However, we want to fail fast.
+        // 1. Check Credit
         if (user.role === 'shop' && user.balance <= 0) {
             throw new Error('Hisobingizda mablag\' yetarli emas (0 credits)');
         }
 
-        // 2. Deduct Credit Atomically (Only for shops)
+        // 2. Deduct Credit Atomically
         if (user.role === 'shop') {
             const updatedUser = await User.findOneAndUpdate(
-                { _id: user._id, balance: { $gt: 0 } }, // Condition: Must have > 0
+                { _id: user._id, balance: { $gt: 0 } },
                 { $inc: { balance: -1 } },
                 { new: true, session }
             );
@@ -360,12 +371,33 @@ app.post('/api/shop/gifts', auth(['admin', 'shop']), async (req, res) => {
             }
         }
 
-        // 3. Create Gift
+        // 3. Extract File URLs (CloudinaryStorage puts url in 'path' or 'secure_url')
+        // Note: multer-storage-cloudinary usually puts the url in `path`.
+        const mindFileUrl = req.files['mindFile'][0].path;
+
+        // Image and Video might be uploaded previously (via existing flow) OR in this request.
+        // User instructions imply "Refactor: Append all fields". So we assume they are sent here.
+        // However, to be safe/flexible, we check if they are in req.files OR req.body.
+
+        let markerUrl = req.body.markerUrl;
+        if (req.files['image']) markerUrl = req.files['image'][0].path;
+
+        let videoUrl = req.body.videoUrl;
+        if (req.files['video']) videoUrl = req.files['video'][0].path;
+
+        if (!markerUrl) throw new Error("Marker Image is required");
+        if (!videoUrl) throw new Error("Video is required");
+
+        // 4. Create Gift
         const giftData = {
             ...req.body,
             userId: user._id, // Link to creator
             shopName: user.shopName,
-            pinCode: req.body.pinCode || Math.floor(1000 + Math.random() * 9000).toString()
+            pinCode: req.body.pinCode || Math.floor(1000 + Math.random() * 9000).toString(),
+            mindFileUrl: mindFileUrl,
+            targetFile: mindFileUrl, // Keep backward compatibility for now
+            thumbnailUrl: markerUrl,
+            videoUrl: videoUrl
         };
 
         const gift = new Gift(giftData);
