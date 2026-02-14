@@ -54,12 +54,58 @@ const ShopDashboard = () => {
         navigate('/login');
     };
 
-    // --- 3. CREATE GIFT FLOW (MANUAL UPLOAD) ---
+
+    // --- MODE: 'auto' | 'manual' ---
+    const [trackingMode, setTrackingMode] = useState('auto');
+    const [compilerReady, setCompilerReady] = useState(false);
+
+    // Load Compiler Script dynamically when needed
+    useEffect(() => {
+        if (trackingMode === 'auto' && !window.MINDAR) {
+            const script = document.createElement('script');
+            script.src = "https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image.prod.js";
+            script.async = true;
+            script.onload = () => {
+                console.log("MindAR Compiler Loaded");
+                setCompilerReady(true);
+            };
+            document.body.appendChild(script);
+        } else if (window.MINDAR) {
+            setCompilerReady(true);
+        }
+    }, [trackingMode]);
+
+    const _loadImage = async (file) => {
+        return new Promise((resolve, reject) => {
+            let img = new Image();
+            img.onload = () => resolve(img);
+            img.onerror = reject;
+            img.src = URL.createObjectURL(file);
+        });
+    }
+
+    const compileMindFile = async (imageFile) => {
+        if (!window.MINDAR) throw new Error("Compiler not loaded yet");
+
+        const compiler = new window.MINDAR.IMAGE.Compiler();
+        const images = [await _loadImage(imageFile)];
+
+        await compiler.compileImageTargets(images, (progress) => {
+            setProgressMsg(`Analiz qilinmoqda... ${(progress).toFixed(2)}%`);
+        });
+
+        const exportedBuffer = await compiler.exportData();
+        return new Blob([exportedBuffer]);
+    };
+
+    // --- 3. CREATE GIFT FLOW (HYBRID) ---
     const handleCreate = async () => {
         if (!form.clientName) return alert("Iltimos, Mijoz ismini kiriting!");
         if (!form.video) return alert("Video yuklanmagan!");
         if (!form.image) return alert("Rasm (Marker) yuklanmagan!");
-        if (!form.mindFile) return alert("Mind fayl (.mind) yuklanmagan!");
+
+        // Validation based on Mode
+        if (trackingMode === 'manual' && !form.mindFile) return alert("Mind fayl (.mind) yuklanmagan!");
 
         if (user.balance <= 0) {
             alert("Sizda yetarli limit mavjud emas! Administratorga murojaat qiling.");
@@ -76,10 +122,18 @@ const ShopDashboard = () => {
             formData.append('visibility', form.visibility === 'public' ? 'public' : 'secret');
             if (form.pinCode) formData.append('pinCode', form.pinCode);
 
-            // Append Files
+            // Append Standard Files
             formData.append('video', form.video);
             formData.append('image', form.image);
-            formData.append('mindFile', form.mindFile);
+
+            // Handle Mind File (Auto vs Manual)
+            if (trackingMode === 'auto') {
+                setProgressMsg("Avtomatik Analiz (1-2 daqiqa)...");
+                const blob = await compileMindFile(form.image);
+                formData.append('mindFile', blob, 'targets.mind'); // Must provide filename for Blob
+            } else {
+                formData.append('mindFile', form.mindFile);
+            }
 
             console.log("Sending Gift Data (Multipart)...");
 
@@ -109,6 +163,7 @@ const ShopDashboard = () => {
             setProgressMsg("");
         }
     };
+
 
     // --- 5. RENDER ---
     return (
@@ -143,6 +198,30 @@ const ShopDashboard = () => {
                     <h2 className="text-lg font-bold mb-4">1. Sovg'a Ma'lumotlari</h2>
 
                     <div className="space-y-4">
+                        {/* Tracking Mode Toggle */}
+                        <div className="bg-black p-4 rounded-xl border border-zinc-800 mb-4">
+                            <label className="text-zinc-400 text-xs font-bold uppercase tracking-widest mb-3 block">Tracking Turi</label>
+                            <div className="flex bg-zinc-800 p-1 rounded-lg">
+                                <button
+                                    onClick={() => setTrackingMode('auto')}
+                                    className={`flex-1 py-2 px-4 rounded-md text-sm font-bold transition-all ${trackingMode === 'auto' ? 'bg-pinhan-gold text-black shadow-lg' : 'text-zinc-400 hover:text-white'}`}
+                                >
+                                    ⚡ AVTOMATIK (Oson)
+                                </button>
+                                <button
+                                    onClick={() => setTrackingMode('manual')}
+                                    className={`flex-1 py-2 px-4 rounded-md text-sm font-bold transition-all ${trackingMode === 'manual' ? 'bg-pinhan-gold text-black shadow-lg' : 'text-zinc-400 hover:text-white'}`}
+                                >
+                                    🛠️ PROFESSIONAL (Mind Fayl)
+                                </button>
+                            </div>
+                            <p className="text-[10px] text-zinc-500 mt-2 text-center">
+                                {trackingMode === 'auto'
+                                    ? "Rasm yuklang, biz uni avtomatik analiz qilamiz (1-2 daqiqa)."
+                                    : "Tayyor .mind faylini yuklang (Barqaror va Tez)."}
+                            </p>
+                        </div>
+
                         <input
                             placeholder="Mijoz Ismi"
                             className="w-full bg-black p-3 rounded border border-zinc-700 focus:border-pinhan-gold outline-none"
@@ -172,7 +251,7 @@ const ShopDashboard = () => {
                             onChange={e => setForm({ ...form, pinCode: e.target.value })}
                         />
 
-                        {/* File Inputs (Manual Upload) */}
+                        {/* File Inputs (Hybrid) */}
                         <div className="space-y-4">
                             {/* Video Input */}
                             <label className={`block p-4 rounded border text-center cursor-pointer ${form.video ? 'border-green-500 text-green-500' : 'border-dashed border-zinc-600'}`}>
@@ -185,9 +264,12 @@ const ShopDashboard = () => {
                                 />
                             </label>
 
-                            {/* Image Input */}
+                            {/* Image Input (Context Aware Label) */}
                             <label className={`block p-4 rounded border text-center cursor-pointer ${form.image ? 'border-green-500 text-green-500' : 'border-dashed border-zinc-600'}`}>
-                                <span className="text-sm">🖼️ Rasm (Marker) Yuklash {form.image && '✅'}</span>
+                                <span className="text-sm">
+                                    {trackingMode === 'auto' ? '🖼️ Rasm Yuklash (Analiz uchun)' : '🖼️ Marker Rasmi (Tashqi ko\'rinish)'}
+                                    {form.image && ' ✅'}
+                                </span>
                                 <input
                                     type="file"
                                     accept="image/*"
@@ -196,18 +278,19 @@ const ShopDashboard = () => {
                                 />
                             </label>
 
-                            {/* Mind File Input */}
-                            <div className="form-group">
-                                <label className="text-white block mb-2">Mind Fayl (.mind) *</label>
-                                <input
-                                    type="file"
-                                    accept=".mind"
-                                    onChange={(e) => setForm({ ...form, mindFile: e.target.files[0] })}
-                                    className="w-full p-2 bg-gray-800 text-white rounded border border-gray-600"
-                                    required
-                                />
-                                <small className="text-gray-400">hi.mindar.org saytidan olingan targets.mind fayli</small>
-                            </div>
+                            {/* Mind File Input (Only in Manual Mode) */}
+                            {trackingMode === 'manual' && (
+                                <div className="form-group animate-fade-in">
+                                    <label className="text-white block mb-2 text-sm">Mind Fayl (.mind) *</label>
+                                    <input
+                                        type="file"
+                                        accept=".mind"
+                                        onChange={(e) => setForm({ ...form, mindFile: e.target.files[0] })}
+                                        className="w-full p-2 bg-zinc-800 text-white rounded border border-zinc-600 text-sm"
+                                    />
+                                    <small className="text-zinc-500 block mt-1">hi.mindar.org saytidan olingan targets.mind fayli</small>
+                                </div>
+                            )}
                         </div>
 
                         <div className="flex gap-2 mt-4">
