@@ -197,15 +197,17 @@ const ShopDashboard = () => {
                             </label>
 
                             {/* Mind File Input */}
-                            <label className={`block p-4 rounded border text-center cursor-pointer ${form.mindFile ? 'border-green-500 text-green-500' : 'border-dashed border-zinc-600'}`}>
-                                <span className="text-sm">🧠 Mind Fayl (.mind) Yuklash {form.mindFile && '✅'}</span>
+                            <div className="form-group">
+                                <label className="text-white block mb-2">Mind Fayl (.mind) *</label>
                                 <input
                                     type="file"
                                     accept=".mind"
-                                    className="hidden"
-                                    onChange={e => setForm({ ...form, mindFile: e.target.files[0] })}
+                                    onChange={(e) => setForm({ ...form, mindFile: e.target.files[0] })}
+                                    className="w-full p-2 bg-gray-800 text-white rounded border border-gray-600"
+                                    required
                                 />
-                            </label>
+                                <small className="text-gray-400">hi.mindar.org saytidan olingan targets.mind fayli</small>
+                            </div>
                         </div>
 
                         <div className="flex gap-2 mt-4">
