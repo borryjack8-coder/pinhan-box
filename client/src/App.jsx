@@ -1,7 +1,7 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import Login from './pages/Login';
-import ShopDashboard from './pages/shop/ShopDashboard';
+import GiftManager from './pages/shop/GiftManager';
 import AdminDashboard from './pages/admin/AdminDashboard';
 import PrivateRoute from './components/PrivateRoute';
 import ARExperience from './components/ARExperience';
@@ -114,7 +114,7 @@ const App = () => {
 
                 <Route path="/shop" element={
                     <PrivateRoute roles={['shop']}>
-                        <ShopDashboard />
+                        <GiftManager />
                     </PrivateRoute>
                 } />
             </Routes>
