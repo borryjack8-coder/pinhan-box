@@ -37,7 +37,7 @@ const ShopDashboard = () => {
             ]);
 
             setUser(meRes.data);
-            localStorage.setItem('user', JSON.stringify(meRes.data)); // Sync
+            localStorage.setItem('user', JSON.stringify(meRes.data));
             setGifts(giftsRes.data);
         } catch (err) {
             console.error("Fetch Data Error:", err);
@@ -53,7 +53,6 @@ const ShopDashboard = () => {
         localStorage.clear();
         navigate('/login');
     };
-
 
     // --- MODE: 'auto' | 'manual' ---
     const [trackingMode, setTrackingMode] = useState('auto');
@@ -82,7 +81,7 @@ const ShopDashboard = () => {
             img.onerror = reject;
             img.src = URL.createObjectURL(file);
         });
-    }
+    };
 
     const compileMindFile = async (imageFile) => {
         if (!window.MINDAR) throw new Error("Compiler not loaded yet");
@@ -130,7 +129,7 @@ const ShopDashboard = () => {
             if (trackingMode === 'auto') {
                 setProgressMsg("Avtomatik Analiz (1-2 daqiqa)...");
                 const blob = await compileMindFile(form.image);
-                formData.append('mindFile', blob, 'targets.mind'); // Must provide filename for Blob
+                formData.append('mindFile', blob, 'targets.mind');
             } else {
                 formData.append('mindFile', form.mindFile);
             }
@@ -267,7 +266,7 @@ const ShopDashboard = () => {
                             {/* Image Input (Context Aware Label) */}
                             <label className={`block p-4 rounded border text-center cursor-pointer ${form.image ? 'border-green-500 text-green-500' : 'border-dashed border-zinc-600'}`}>
                                 <span className="text-sm">
-                                    {trackingMode === 'auto' ? '🖼️ Rasm Yuklash (Analiz uchun)' : '🖼️ Marker Rasmi (Tashqi ko\'rinish)'}
+                                    {trackingMode === 'auto' ? '🖼️ Rasm Yuklash (Analiz uchun)' : "🖼️ Marker Rasmi (Tashqi ko'rinish)"}
                                     {form.image && ' ✅'}
                                 </span>
                                 <input
@@ -278,13 +277,14 @@ const ShopDashboard = () => {
                                 />
                             </label>
 
-                            {/* Mind File Input (Only in Manual Mode) */}
+                            {/* Mind File Input (Only in Manual/Professional Mode) */}
                             {trackingMode === 'manual' && (
                                 <div className="form-group animate-fade-in">
                                     <label className="text-white block mb-2 text-sm">Mind Fayl (.mind) *</label>
                                     <input
                                         type="file"
                                         accept=".mind"
+                                        name="mindFile"
                                         onChange={(e) => setForm({ ...form, mindFile: e.target.files[0] })}
                                         className="w-full p-2 bg-zinc-800 text-white rounded border border-zinc-600 text-sm"
                                     />
@@ -361,5 +361,3 @@ const ShopDashboard = () => {
 };
 
 export default ShopDashboard;
-/ /   F o r c e   D e p l o y   -   U I   C h e c k   -   0 2 / 1 4 / 2 0 2 6   2 2 : 1 9 : 3 8  
- 
