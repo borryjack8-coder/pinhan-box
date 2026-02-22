@@ -8,7 +8,7 @@ const ARExperience = ({ videoUrl: propVideoUrl, targetFile: propTargetFile }) =>
     const [arReady, setArReady] = useState(false);
     const [arError, setArError] = useState(null);
     const [started, setStarted] = useState(false);
-    const [videoRatio, setVideoRatio] = useState(1);
+    const [videoSize, setVideoSize] = useState({ w: 1, h: 1 });
     const [targetFound, setTargetFound] = useState(false);
 
     // Data State
@@ -119,7 +119,7 @@ const ARExperience = ({ videoUrl: propVideoUrl, targetFile: propTargetFile }) =>
     const handleMetadata = (e) => {
         const { videoWidth, videoHeight } = e.target;
         if (videoWidth && videoHeight) {
-            setVideoRatio(videoHeight / videoWidth);
+            setVideoSize({ w: videoWidth, h: videoHeight });
         }
     };
 
@@ -130,23 +130,42 @@ const ARExperience = ({ videoUrl: propVideoUrl, targetFile: propTargetFile }) =>
         <div className="fixed inset-0 bg-black overflow-hidden" style={{ zIndex: 0 }}>
             {/* --- GLOBAL CSS FIXES --- */}
             <style>{`
-                html, body, #root { 
-                    margin: 0; 
-                    padding: 0; 
-                    width: 100%; 
-                    height: 100%; 
-                    overflow: hidden; 
-                    background: black; 
+                html, body, #root {
+                    margin: 0 !important;
+                    padding: 0 !important;
+                    width: 100vw !important;
+                    height: 100vh !important;
+                    overflow: hidden !important;
+                    position: fixed !important;
+                    background: black;
                 }
-                .mindar-ui-overlay, .a-canvas { 
-                    position: absolute !important; 
-                    width: 100% !important; 
-                    height: 100% !important; 
-                    top: 0 !important; 
-                    left: 0 !important; 
-                    z-index: 0; 
+                /* FIX 1: Force MindAR camera video to fill the entire screen */
+                .mindar-ui-overlay video,
+                a-scene video:not(#ar-video) {
+                    position: fixed !important;
+                    top: 0 !important;
+                    left: 0 !important;
+                    width: 100vw !important;
+                    height: 100vh !important;
+                    object-fit: cover !important;
+                    z-index: -2 !important;
+                    display: block !important;
                 }
-                .mindar-ui-overlay { display: none !important; }
+                .mindar-ui-overlay {
+                    position: absolute !important;
+                    top: 0 !important; left: 0 !important;
+                    right: 0 !important; bottom: 0 !important;
+                    display: block !important;
+                }
+                .a-canvas {
+                    position: absolute !important;
+                    width: 100% !important;
+                    height: 100% !important;
+                    top: 0 !important;
+                    left: 0 !important;
+                    z-index: 0 !important;
+                    background: transparent !important;
+                }
                 @keyframes pulse-glow {
                     0%, 100% { box-shadow: 0 0 20px rgba(234, 179, 8, 0.4); transform: scale(1); }
                     50% { box-shadow: 0 0 40px rgba(234, 179, 8, 0.6); transform: scale(1.05); }
@@ -259,13 +278,15 @@ const ARExperience = ({ videoUrl: propVideoUrl, targetFile: propTargetFile }) =>
 
                         <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
 
-                        {/* --- ZERO SLIP (Strict Nesting) --- */}
+                        {/* FIX 2: MindAR target coordinate system anchors at width=1.
+                             height = videoH/videoW gives the correct aspect ratio.
+                             position z=0.001 avoids z-fighting with the marker plane. */}
                         <a-entity mindar-image-target="targetIndex: 0">
                             <a-video
                                 src="#ar-video"
-                                position="0 0 0.1"
-                                height={videoRatio}
+                                position="0 0 0.001"
                                 width="1"
+                                height={videoSize.h / videoSize.w}
                                 rotation="0 0 0"
                                 loop="true"
                             ></a-video>
