@@ -418,9 +418,34 @@ const ShopDashboard = () => {
 
             {/* ── HEADER ── */}
             <header className="admin-header">
-                <div>
-                    <h1 style={{ fontSize: 17, fontWeight: 700, color: '#2dd4bf', margin: 0 }}>{user.shopName || 'Shop Panel'}</h1>
-                    <p style={{ fontSize: 11, color: '#334155', margin: '2px 0 0' }}>@{user.username}</p>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    {/* Back button — only visible on non-home tabs */}
+                    {tab !== 'home' && (
+                        <button
+                            onClick={() => setTab('home')}
+                            style={{ display: 'flex', alignItems: 'center', gap: 5, background: 'rgba(148,163,184,0.06)', border: '1px solid rgba(148,163,184,0.12)', borderRadius: 10, padding: '7px 12px', cursor: 'pointer', color: '#64748b', fontSize: 12, fontWeight: 700, transition: 'all 0.18s', flexShrink: 0 }}
+                            onMouseEnter={e => { e.currentTarget.style.color = '#f1f5f9'; e.currentTarget.style.borderColor = 'rgba(148,163,184,0.3)'; }}
+                            onMouseLeave={e => { e.currentTarget.style.color = '#64748b'; e.currentTarget.style.borderColor = 'rgba(148,163,184,0.12)'; }}
+                        >
+                            {/* Left arrow SVG */}
+                            <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
+                                <polyline points="15 18 9 12 15 6" />
+                            </svg>
+                            Orqaga
+                        </button>
+                    )}
+                    {/* Clickable logo → always goes home */}
+                    <div
+                        onClick={() => setTab('home')}
+                        style={{ cursor: 'pointer' }}
+                        title="Bosh sahifa"
+                    >
+                        <h1 style={{ fontSize: 17, fontWeight: 700, color: '#2dd4bf', margin: 0, transition: 'opacity 0.15s' }}
+                            onMouseEnter={e => e.currentTarget.style.opacity = '0.75'}
+                            onMouseLeave={e => e.currentTarget.style.opacity = '1'}
+                        >{user.shopName || 'Shop Panel'}</h1>
+                        <p style={{ fontSize: 11, color: '#334155', margin: '2px 0 0' }}>@{user.username}</p>
+                    </div>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                     <button
