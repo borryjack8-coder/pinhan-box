@@ -215,32 +215,76 @@ const ARExperience = ({ videoUrl: propVideoUrl, targetFile: propTargetFile }) =>
 
     // ── RENDER ────────────────────────────────────────────────────────────────
     return (
-        <div style={{ position: 'fixed', inset: 0, background: '#000', overflow: 'hidden', zIndex: 0 }}>
-            {/* AR-SCOPED CSS — only active when this component is mounted */}
+        <div className="ar-absolute-container">
+            {/*
+              ═══════════════════════════════════════════════════════
+              BULLETPROOF SCOPED AR CSS
+              Covers TWO injection scenarios:
+              1. Elements inside `.ar-absolute-container` (React-managed)
+              2. Elements MindAR injects directly into <body> at runtime
+              ═══════════════════════════════════════════════════════
+            */}
             <style>{`
-                /* Camera video fullscreen */
-                .mindar-ui-overlay video,
-                a-scene video:not(#ar-video) {
+                /* ── Container: covers entire viewport, highest z-index ── */
+                .ar-absolute-container {
                     position: fixed !important;
-                    top: 0 !important; left: 0 !important;
-                    width: 100vw !important; height: 100vh !important;
-                    object-fit: cover !important;
-                    z-index: -2 !important;
-                    display: block !important;
+                    top: 0 !important;
+                    left: 0 !important;
+                    width: 100vw !important;
+                    height: 100vh !important;
+                    margin: 0 !important;
+                    padding: 0 !important;
+                    overflow: hidden !important;
+                    z-index: 99999 !important;
+                    background-color: black;
                 }
-                .mindar-ui-overlay {
+
+                /* ── Camera feed video (MindAR injects into .mindar-ui-overlay) ── */
+                .ar-absolute-container video,
+                .ar-absolute-container canvas,
+                .mindar-ui-overlay video {
                     position: absolute !important;
-                    inset: 0 !important;
+                    top: 0 !important;
+                    left: 0 !important;
+                    width: 100vw !important;
+                    height: 100vh !important;
+                    object-fit: cover !important;
+                    margin: 0 !important;
+                    padding: 0 !important;
                     display: block !important;
                 }
+
+                /* ── MindAR overlay wrapper ── */
+                .mindar-ui-overlay {
+                    position: fixed !important;
+                    top: 0 !important;
+                    left: 0 !important;
+                    width: 100vw !important;
+                    height: 100vh !important;
+                    overflow: hidden !important;
+                    z-index: 99998 !important;
+                }
+
+                /* ── A-Frame canvas: transparent overlay on top of camera ── */
                 .a-canvas {
                     position: absolute !important;
-                    inset: 0 !important;
+                    top: 0 !important;
+                    left: 0 !important;
                     width: 100% !important;
                     height: 100% !important;
-                    z-index: 0 !important;
                     background: transparent !important;
+                    z-index: 1 !important;
                 }
+
+                /* ── Kill any <a-scene> injected body overflow ── */
+                a-scene {
+                    position: absolute !important;
+                    top: 0 !important;
+                    left: 0 !important;
+                    width: 100% !important;
+                    height: 100% !important;
+                }
+
                 @keyframes pulse-glow {
                     0%, 100% { box-shadow: 0 0 20px rgba(234,179,8,0.4); transform: scale(1); }
                     50%       { box-shadow: 0 0 40px rgba(234,179,8,0.6); transform: scale(1.05); }
